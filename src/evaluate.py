@@ -24,13 +24,19 @@ dropout = 0.0
 for subdir, dirs, files in os.walk(filepath):
 	for file in files:
 		path = os.path.join(subdir, file)
+		
+		if ".ipynb" in file:
+			continue
 
 		if "syn4" in path:
 			dataset = "syn4"
+			dataset_name = "Tree-Cycles"
 		elif "syn5" in path:
 			dataset = "syn5"
+			dataset_name = "Tree-Grid"
 		elif "syn1" in path:
 			dataset = "syn1"
+			dataset_name = "BA-shapes"
 
 		with open("../data/gnn_explainer/{}.pickle".format(dataset), "rb") as f:
 			data = pickle.load(f)
@@ -109,6 +115,7 @@ for subdir, dirs, files in os.walk(filepath):
 
 
 		print(path)
+		print("Dataset name: {}".format(dataset_name))
 		print("Num cf examples found: {}/{}".format(len(df), len(idx_test)))
 		print("Avg fidelity: {}".format(1 - len(df) / len(idx_test)))
 		print("Average graph distance: {}".format(np.mean(df["loss_graph_dist"])))
