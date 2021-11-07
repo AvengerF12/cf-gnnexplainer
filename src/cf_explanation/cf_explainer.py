@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
-from torch.nn.utils import clip_grad_norm
+from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb import GCNSyntheticPerturb
 from utils.utils import normalize_adj
@@ -74,6 +74,7 @@ class CFExplainer:
 				best_cf_example.append(new_example)
 				best_loss = loss_total
 				num_cf_examples += 1
+				
 		print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
 		print(" ")
 		return(best_cf_example)
@@ -81,7 +82,7 @@ class CFExplainer:
 
 	def train(self, epoch):
 		t = time.time()
-		self.cf_model.train()
+		self.cf_model.train() # Set Module to training mode
 		self.cf_optimizer.zero_grad()
 
 		# output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
@@ -96,7 +97,7 @@ class CFExplainer:
 		# loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
 		loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
 		loss_total.backward()
-		clip_grad_norm(self.cf_model.parameters(), 2.0)
+		clip_grad_norm_(self.cf_model.parameters(), 2.0)
 		self.cf_optimizer.step()
 		print('Node idx: {}'.format(self.node_idx),
 		      'New idx: {}'.format(self.new_idx),
