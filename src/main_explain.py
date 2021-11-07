@@ -50,7 +50,10 @@ features = torch.Tensor(data["feat"]).squeeze()
 labels = torch.tensor(data["labels"]).squeeze()
 idx_train = torch.tensor(data["train_idx"])
 idx_test = torch.tensor(data["test_idx"])
-edge_index = dense_to_sparse(adj)       # Needed for pytorch-geo functions
+# Needed for pytorch-geo functions, returns a sparse representation:
+# Edge indices: row/columns of cells containing non-zero entries
+# Edge attributes: tensor containing weights of edges
+edge_index = dense_to_sparse(adj)
 
 # Change to binary task: 0 if not in house, 1 if in house
 if args.dataset == "syn1_binary":
@@ -69,21 +72,24 @@ model.eval()
 output = model(features, norm_adj)
 y_pred_orig = torch.argmax(output, dim=1)
 print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
-print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_counts=True)))      # Confirm model is actually doing something
+# Confirm model is actually doing something
+print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_counts=True)))
 
 
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-for i in idx_test[:20]:
+for i in idx_test[:20]: #Note: only 20 cf are generated
 	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(i), edge_index, args.n_layers + 1, features, labels)
 	new_idx = node_dict[int(i)]
 
 	# Check that original model gives same prediction on full graph and subgraph
 	with torch.no_grad():
+		
+		sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
+		
 		print("Output original model, full adj: {}".format(output[i]))
-		print("Output original model, sub adj: {}".format(model(sub_feat, normalize_adj(sub_adj))[new_idx]))
-
+		print("Output original model, sub adj: {}".format(sub_adj_pred))
 
 	# Need to instantitate new cf model every time because size of P changes based on size of sub_adj
 	explainer = CFExplainer(model=model,
@@ -97,6 +103,7 @@ for i in idx_test[:20]:
 							beta=args.beta,
 							device=args.device)
 
+	# Move data to cuda device
 	if args.device == 'cuda':
 		model.cuda()
 		explainer.cf_model.cuda()
@@ -107,20 +114,28 @@ for i in idx_test[:20]:
 		idx_train = idx_train.cuda()
 		idx_test = idx_test.cuda()
 
+	# Need node dict for accuracy calculation
 	cf_example = explainer.explain(node_idx=i, cf_optimizer=args.optimizer, new_idx=new_idx, lr=args.lr,
-	                               n_momentum=args.n_momentum, num_epochs=args.num_epochs, node_dict=node_dict)     # Need node dict for accuracy calculation
+	                               n_momentum=args.n_momentum, num_epochs=args.num_epochs)
+	                               
 	test_cf_examples.append(cf_example)
 	print("Time for {} epochs of one example: {:.4f}min".format(args.num_epochs, (time.time() - start)/60))
+	
 print("Total time elapsed: {:.4f}s".format((time.time() - start)/60))
-print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx_test)))
+print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx_test))) # Includes also empty examples!
 
 # Save CF examples in test set
 
 if args.edge_additions == 1:
-	with safe_open("../results_incl_additions/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(args.dataset, args.optimizer, args.dataset,
-																		args.lr, args.beta, args.n_momentum, args.num_epochs), "wb") as f:
+	with safe_open("../results_incl_additions/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
+					args.dataset, args.optimizer, args.dataset, args.lr, 
+					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
+						
 		pickle.dump(test_cf_examples, f)
+		
 elif args.edge_additions == 0:
-	with safe_open("../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(args.dataset, args.optimizer, args.dataset,
-																		args.lr, args.beta, args.n_momentum, args.num_epochs), "wb") as f:
+	with safe_open("../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
+					args.dataset, args.optimizer, args.dataset, args.lr,
+					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
+						 
 		pickle.dump(test_cf_examples, f)
