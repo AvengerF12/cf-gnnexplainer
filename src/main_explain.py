@@ -29,7 +29,7 @@ parser.add_argument('--optimizer', type=str, default="SGD", help='SGD or Adadelt
 parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
 parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
 parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
-parser.add_argument('--edge_additions', type=int, default=0, help='Include edge additions?')
+parser.add_argument('--edge_additions', type=bool, default=False, help='Include edge additions?')
 parser.add_argument('--device', default='cpu', help='CPU or GPU.')
 args = parser.parse_args()
 
@@ -103,7 +103,9 @@ for i, v in enumerate(idx_test_sublist):
 							y_pred_orig=y_pred_orig[v],
 							num_classes = len(labels.unique()),
 							beta=args.beta,
-							device=args.device)
+							device=args.device,
+							edge_additions=args.edge_additions) 
+							# If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
 
 	# Move data to cuda device
 	if args.device == 'cuda':
@@ -129,14 +131,14 @@ print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx
 
 # Save CF examples in test set
 
-if args.edge_additions == 1:
-	with safe_open("../results_incl_additions/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
+if args.edge_additions:
+	with safe_open("../results/{}_incl_additions/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
 					args.dataset, args.optimizer, args.dataset, args.lr, 
 					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
 						
 		pickle.dump(test_cf_examples, f)
 		
-elif args.edge_additions == 0:
+else:
 	with safe_open("../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
 					args.dataset, args.optimizer, args.dataset, args.lr,
 					args.beta, args.n_momentum, args.num_epochs), "wb") as f:

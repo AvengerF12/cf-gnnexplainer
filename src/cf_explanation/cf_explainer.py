@@ -4,7 +4,6 @@ import math
 import time
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
@@ -18,7 +17,7 @@ class CFExplainer:
 	CF Explainer class, returns counterfactual subgraph
 	"""
 	def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
-	              sub_labels, y_pred_orig, num_classes, beta, device):
+	              sub_labels, y_pred_orig, num_classes, beta, device, edge_additions=False):
 		super(CFExplainer, self).__init__()
 		self.model = model
 		self.model.eval()
@@ -31,10 +30,12 @@ class CFExplainer:
 		self.beta = beta
 		self.num_classes = num_classes
 		self.device = device
+		self.edge_additions = edge_additions
 
 		# Instantiate CF model class, load weights from original model
 		self.cf_model = GCNSyntheticPerturb(self.sub_feat.shape[1], n_hid, n_hid,
-		                                    self.num_classes, self.sub_adj, dropout, beta, edge_additions=True)
+		                                    self.num_classes, self.sub_adj, dropout, beta, 
+		                                    edge_additions=self.edge_additions)
 
 		self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 
@@ -70,7 +71,11 @@ class CFExplainer:
 		num_cf_examples = 0
 		for epoch in range(num_epochs):
 			new_example, loss_total = self.train(epoch)
+			#print(len(new_example))
+			print(loss_total)
+			print(best_loss)
 			if new_example != [] and loss_total < best_loss:
+				print("BOB")
 				best_cf_example.append(new_example)
 				best_loss = loss_total
 				num_cf_examples += 1
