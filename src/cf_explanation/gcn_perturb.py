@@ -67,7 +67,6 @@ class GCNSyntheticPerturb(nn.Module):
 
 	def reset_parameters(self, eps=10**-4):
 		# Think more about how to initialize this
-		print(self.P_vec)
 		with torch.no_grad():
 			if self.edge_additions:
 				adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size).numpy()
@@ -147,10 +146,10 @@ class GCNSyntheticPerturb(nn.Module):
 		y_pred_orig = y_pred_orig.unsqueeze(0)
 
 		if self.edge_additions:
-			cf_adj = self.P
+			cf_adj = self.P_hat_symm
 		else:
-			cf_adj = self.P * self.adj
-		cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+			cf_adj = self.P_hat_symm * self.adj
+		#cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
 
 		# Want negative in front to maximize loss instead of minimizing it to find CFs
 		loss_pred = - F.nll_loss(output, y_pred_orig)
