@@ -80,13 +80,13 @@ class GCNSyntheticPerturb(nn.Module):
 				torch.sub(self.P_vec, eps, out=self.P_vec)
 
 
-	def forward(self, x, sub_adj):
+	def forward(self, x, sub_adj): # Signature required by pytorch
 		self.sub_adj = sub_adj
 		# Same as normalize_adj in utils.py except includes P_hat in A_tilde
 		self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)      # Ensure symmetry
 
-		A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
-		A_tilde.requires_grad = True
+		#A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
+		#A_tilde.requires_grad = True
 
 		if self.edge_additions:         # Learn new adj matrix directly
 			A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
@@ -116,18 +116,12 @@ class GCNSyntheticPerturb(nn.Module):
 
 		self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()      # threshold P_hat
 
-		if self.edge_additions:
-			A_tilde = self.P + torch.eye(self.num_nodes)
+		if self.edge_additions:		# Learn new adj matrix directly
+			A_tilde = self.P
 		else:
-			A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
+			A_tilde = self.P * self.adj
 
-		D_tilde = get_degree_matrix(A_tilde)
-		# Raise to power -1/2, set all infs to 0s
-		D_tilde_exp = D_tilde ** (-1 / 2)
-		D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-		# Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
-		norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+		norm_adj = normalize_adj(A_tilde)
 
 		x1 = F.relu(self.gc1(x, norm_adj))
 		x1 = F.dropout(x1, self.dropout, training=self.training)
@@ -139,17 +133,16 @@ class GCNSyntheticPerturb(nn.Module):
 
 
 	def loss(self, output, y_pred_orig, y_pred_new_actual):
-		pred_same = (y_pred_new_actual == y_pred_orig).float()
+		pred_same = (y_pred_new_actual == y_pred_orig).float() # Comparing with non-diff prediction
 
 		# Need dim >=2 for F.nll_loss to work
-		output = output.unsqueeze(0)
-		y_pred_orig = y_pred_orig.unsqueeze(0)
+		#output = output.unsqueeze(0)
+		#y_pred_orig = y_pred_orig.unsqueeze(0)
 
 		if self.edge_additions:
 			cf_adj = self.P_hat_symm
 		else:
-			cf_adj = self.P_hat_symm * self.adj
-		#cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+			cf_adj = torch.mul(self.P_hat_symm, self.adj)
 
 		# Want negative in front to maximize loss instead of minimizing it to find CFs
 		loss_pred = - F.nll_loss(output, y_pred_orig)

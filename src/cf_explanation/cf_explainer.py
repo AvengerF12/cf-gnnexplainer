@@ -49,7 +49,6 @@ class CFExplainer:
 			print("cf model required_grad: ", name, param.requires_grad)
 
 
-
 	def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs):
 		self.node_idx = node_idx
 		self.new_idx = new_idx
@@ -71,11 +70,9 @@ class CFExplainer:
 		num_cf_examples = 0
 		for epoch in range(num_epochs):
 			new_example, loss_total = self.train(epoch)
-			#print(len(new_example))
-			print(loss_total)
-			print(best_loss)
+			print(loss_total, "(Current loss)")
+			print(best_loss, "(Best loss)")
 			if new_example != [] and loss_total < best_loss:
-				print("BOB")
 				best_cf_example.append(new_example)
 				best_loss = loss_total
 				num_cf_examples += 1

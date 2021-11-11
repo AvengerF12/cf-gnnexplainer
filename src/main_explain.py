@@ -52,7 +52,7 @@ idx_train = torch.tensor(data["train_idx"])
 idx_test = torch.tensor(data["test_idx"])
 # Needed for pytorch-geo functions, returns a sparse representation:
 # Edge indices: row/columns of cells containing non-zero entries
-# Edge attributes: tensor containing weights of edges
+# Edge attributes: tensor containing edge's features
 edge_index = dense_to_sparse(adj)
 
 # Change to binary task: 0 if not in house, 1 if in house
@@ -79,9 +79,9 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-
-idx_test_sublist = idx_test[:20] #Note: these are the nodes for which a cf is generated
+idx_test_sublist = idx_test[:100] #Note: these are the nodes for which a cf is generated
 for i, v in enumerate(idx_test_sublist):
+	
 	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(v), edge_index, args.n_layers + 1, features, labels)
 	new_idx = node_dict[int(v)]
 
@@ -118,7 +118,6 @@ for i, v in enumerate(idx_test_sublist):
 		idx_train = idx_train.cuda()
 		idx_test = idx_test.cuda()
 
-	# Need node dict for accuracy calculation
 	cf_example = explainer.explain(node_idx=v, cf_optimizer=args.optimizer, new_idx=new_idx, lr=args.lr,
 	                               n_momentum=args.n_momentum, num_epochs=args.num_epochs)
 	                               
