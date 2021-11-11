@@ -79,6 +79,7 @@ for subdir, dirs, files in os.walk(filepath):
 		accuracy = []
 		# Get original predictions
 		dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))), y_pred_orig.numpy()))
+		
 		for i in range(len(df_motif)):
 			node_idx = df_motif["node_idx"][i]
 			new_idx = df_motif["new_idx"][i]
@@ -90,7 +91,7 @@ for subdir, dirs, files in os.walk(filepath):
 				cf_adj = df_motif["cf_adj"][i]
 				sub_adj = df_motif["sub_adj"][i]
 				perturb = np.abs(cf_adj - sub_adj)
-				perturb_edges = np.nonzero(perturb)  # Edge indices
+				perturb_edges = np.nonzero(perturb)  # Changed edge indices
 
 				nodes_involved = np.unique(np.concatenate((perturb_edges[0], perturb_edges[1]), axis=0))
 				perturb_nodes = nodes_involved[nodes_involved != new_idx]  # Remove original node
@@ -108,6 +109,8 @@ for subdir, dirs, files in os.walk(filepath):
 
 				accuracy.append([node_idx, new_idx, perturb_nodes_orig_idx,
 				                 perturb_nodes_orig_ypred, nodes_in_motif, prop_correct])
+			else:
+				raise RuntimeError("Error in node mapping")
 
 		df_accuracy = pd.DataFrame(accuracy, columns=["node_idx", "new_idx", "perturb_nodes_orig_idx",
 		                                              "perturb_nodes_orig_ypred", "nodes_in_motif", "prop_correct"])

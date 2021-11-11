@@ -22,13 +22,6 @@ def safe_open(path, w):
 	return open(path, w)
 
 
-def accuracy(output, labels):
-	preds = output.max(1)[1].type_as(labels)
-	correct = preds.eq(labels).double()
-	correct = correct.sum()
-	return correct / len(labels)
-
-
 def get_degree_matrix(adj):
 	return torch.diag(sum(adj))
 
@@ -41,7 +34,7 @@ def normalize_adj(adj):
 	D_tilde_exp = D_tilde ** (-1 / 2)
 	D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
 
-	# Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
+	# Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
 	norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 	return norm_adj
 
