@@ -29,7 +29,7 @@ parser.add_argument('--optimizer', type=str, default="SGD", help='SGD or Adadelt
 parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
 parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
 parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
-parser.add_argument('--edge_additions', type=bool, default=False, help='Include edge additions?')
+parser.add_argument('--edge_additions', type=int, default=0, help='Include edge additions?')
 parser.add_argument('--device', default='cpu', help='CPU or GPU.')
 args = parser.parse_args()
 
@@ -54,6 +54,7 @@ idx_test = torch.tensor(data["test_idx"])
 # Edge indices: row/columns of cells containing non-zero entries
 # Edge attributes: tensor containing edge's features
 edge_index = dense_to_sparse(adj)
+edge_additions_bool = args.edge_additions == 1
 
 # Change to binary task: 0 if not in house, 1 if in house
 if args.dataset == "syn1_binary":
@@ -79,7 +80,7 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-idx_test_sublist = idx_test[:100] #Note: these are the nodes for which a cf is generated
+idx_test_sublist = idx_test[:] #Note: these are the nodes for which a cf is generated
 for i, v in enumerate(idx_test_sublist):
 	
 	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(v), edge_index, args.n_layers + 1, features, labels)
@@ -104,7 +105,7 @@ for i, v in enumerate(idx_test_sublist):
 							num_classes = len(labels.unique()),
 							beta=args.beta,
 							device=args.device,
-							edge_additions=args.edge_additions) 
+							edge_additions=edge_additions_bool) 
 							# If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
 
 	# Move data to cuda device
@@ -130,7 +131,7 @@ print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx
 
 # Save CF examples in test set
 
-if args.edge_additions:
+if edge_additions_bool:
 	with safe_open("../results/{}_incl_additions/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
 					args.dataset, args.optimizer, args.dataset, args.lr, 
 					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
