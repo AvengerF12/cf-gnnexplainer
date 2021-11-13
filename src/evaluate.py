@@ -16,8 +16,8 @@ from utils.utils import normalize_adj, get_neighbourhood
 
 filepath = "../results/"
 
-header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "y_pred_orig", "y_pred_new", "y_pred_new_actual",
-            "label", "num_nodes", "loss_total", "loss_pred", "loss_graph_dist"]
+header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "y_pred_orig", "y_pred_new_actual",
+            "label", "num_nodes", "loss_graph_dist"]
 hidden = 20
 dropout = 0.0
 
@@ -67,16 +67,17 @@ for subdir, dirs, files in os.walk(filepath):
 			df = pd.DataFrame(df_prep, columns=header)
 
 
-		# Add num edges
+		# Add num edges for each generated CF
 		num_edges = []
 		for i in df.index:
 			num_edges.append(sum(sum(df["sub_adj"][i])) / 2)
 		df["num_edges"] = num_edges
 
 
-		# For accuracy, only look at motif nodes
+		# For accuracy, only look at motif nodes among CFs
 		df_motif = df[df["y_pred_orig"] != 0].reset_index(drop=True)
 		accuracy = []
+		
 		# Get original predictions
 		dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))), y_pred_orig.numpy()))
 		
