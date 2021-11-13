@@ -71,7 +71,7 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-for i in idx_test[:]:
+for i in idx_test[:20]:
 	best_loss = np.inf
 
 	for n in range(args.num_epochs):
@@ -113,13 +113,14 @@ for i in idx_test[:]:
 			print("best loss: {}".format(best_loss))
 			best_cf_example = [i.item(), new_idx.item(),
 				            cf_adj.detach().numpy(), sub_adj.detach().numpy(),
-				            pred_cf.item(), pred_orig.item(), sub_labels[new_idx].numpy(),
-				            sub_adj.shape[0], node_dict,
-				               loss_graph_dist.item()]
-	test_cf_examples.append(best_cf_example)
+				            pred_orig.item(), pred_cf.item(), sub_labels[new_idx].numpy(),
+				            sub_adj.shape[0], loss_graph_dist.item()]
+				            
+	test_cf_examples.append((best_cf_example, best_loss))
 	print("Time for {} epochs of one example: {:.4f}min".format(args.num_epochs, (time.time() - start)/60))
+	
 print("Total time elapsed: {:.4f}min".format((time.time() - start)/60))
 
 # Save CF examples in test set
-with safe_open("../results/random_perturb/{}_baseline_cf_examples_epochs{}".format(args.dataset, args.num_epochs), "wb") as f:
+with safe_open("../../results/random_perturb/{}_baseline_cf_examples_epochs{}".format(args.dataset, args.num_epochs), "wb") as f:
 		pickle.dump(test_cf_examples, f)

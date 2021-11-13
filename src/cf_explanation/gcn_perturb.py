@@ -86,9 +86,6 @@ class GCNSyntheticPerturb(nn.Module):
 		# Same as normalize_adj in utils.py except includes P_hat in A_tilde
 		self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)      # Ensure symmetry
 
-		#A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
-		#A_tilde.requires_grad = True
-
 		if self.edge_additions:         # Learn new adj matrix directly
 			A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
 		else:       # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
@@ -137,8 +134,8 @@ class GCNSyntheticPerturb(nn.Module):
 		pred_same = (y_pred_new_actual == y_pred_orig).float() # Comparing with non-diff prediction
 
 		# Need dim >=2 for F.nll_loss to work
-		#output = output.unsqueeze(0)
-		#y_pred_orig = y_pred_orig.unsqueeze(0)
+		output = output.unsqueeze(0)
+		y_pred_orig = y_pred_orig.unsqueeze(0)
 
 		if self.edge_additions:
 			cf_adj = self.P

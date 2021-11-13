@@ -115,10 +115,9 @@ class CFExplainer:
 		if y_pred_new_actual != self.y_pred_orig:
 			cf_stats = [self.node_idx.item(), self.new_idx.item(),
 			            cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
-			            self.y_pred_orig.item(), y_pred_new.item(),
-			            y_pred_new_actual.item(), self.sub_labels[self.new_idx].numpy(),
-			            self.sub_adj.shape[0], loss_total.item(),
-			            loss_pred.item(), loss_graph_dist.item()]
+			            self.y_pred_orig.item(), y_pred_new_actual.item(), 
+			            self.sub_labels[self.new_idx].numpy(),
+			            self.sub_adj.shape[0], loss_graph_dist.item()]
 			
 		return(cf_stats, loss_total.item())
 
