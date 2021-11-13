@@ -140,15 +140,17 @@ class GCNSyntheticPerturb(nn.Module):
 		#y_pred_orig = y_pred_orig.unsqueeze(0)
 
 		if self.edge_additions:
-			cf_adj = self.P_hat_symm
+			cf_adj_hat = self.P_hat_symm
 		else:
-			cf_adj = torch.mul(self.P_hat_symm, self.adj)
+			cf_adj_hat = torch.mul(self.P_hat_symm, self.adj)
 
 		# Want negative in front to maximize loss instead of minimizing it to find CFs
 		loss_pred = - F.nll_loss(output, y_pred_orig)
-		loss_graph_dist = sum(sum(abs(cf_adj - self.adj))) / 2      # Number of edges changed (symmetrical)
+		loss_graph_dist = sum(sum(abs(cf_adj_hat - self.adj))) / 2      # Number of edges changed (symmetrical)
 
 		# Zero-out loss_pred with pred_same if prediction flips
 		loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
-		
+
+		cf_adj = (torch.sigmoid(cf_adj_hat) >= 0.5).float()      # threshold
+
 		return loss_total, loss_pred, loss_graph_dist, cf_adj
