@@ -52,7 +52,7 @@ for subdir, dirs, files in os.walk(filepath):
 		model = GCNSynthetic(nfeat=features.shape[1], nhid=hidden, nout=hidden,
 		                     nclass=len(labels.unique()), dropout=dropout)
 		model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset)))
-		model.eval()
+		model.eval() # Testing mode
 		output = model(features, norm_adj)
 		y_pred_orig = torch.argmax(output, dim=1)
 
@@ -62,15 +62,16 @@ for subdir, dirs, files in os.walk(filepath):
 			cf_examples = pickle.load(f)
 			df_prep = []
 			for example in cf_examples:
-				if example != []:
+				if example[0] != []:
 					df_prep.append(example[0])
 			df = pd.DataFrame(df_prep, columns=header)
-
 
 		# Add num edges for each generated CF
 		num_edges = []
 		for i in df.index:
+			
 			num_edges.append(sum(sum(df["sub_adj"][i])) / 2)
+			
 		df["num_edges"] = num_edges
 
 

@@ -73,13 +73,14 @@ class CFExplainer:
 			print(loss_total, "(Current loss)")
 			print(best_loss, "(Best loss)")
 			if new_example != [] and loss_total < best_loss:
-				best_cf_example.append(new_example)
+				best_cf_example = new_example
 				best_loss = loss_total
 				num_cf_examples += 1
 				
 		print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
 		print(" ")
-		return(best_cf_example)
+		
+		return(best_cf_example, best_loss)
 
 
 	def train(self, epoch):
@@ -97,10 +98,12 @@ class CFExplainer:
 		y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
 		# loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
-		loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
+		loss_total, loss_pred, loss_graph_dist, cf_adj = \
+			self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
 		loss_total.backward()
 		clip_grad_norm_(self.cf_model.parameters(), 2.0)
 		self.cf_optimizer.step()
+		
 		print('Node idx: {}'.format(self.node_idx),
 		      'New idx: {}'.format(self.new_idx),
 			  'Epoch: {:04d}'.format(epoch + 1),
@@ -111,6 +114,7 @@ class CFExplainer:
 		      'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
 		      'orig pred: {}, new pred: {}, new pred nondiff: {}'.format(self.y_pred_orig, y_pred_new, y_pred_new_actual))
 		print(" ")
+		
 		cf_stats = []
 		if y_pred_new_actual != self.y_pred_orig:
 			cf_stats = [self.node_idx.item(), self.new_idx.item(),
