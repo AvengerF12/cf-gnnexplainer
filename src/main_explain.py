@@ -80,7 +80,7 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-idx_test_sublist = idx_test[:] #Note: these are the nodes for which a cf is generated
+idx_test_sublist = idx_test[:50] #Note: these are the nodes for which a cf is generated
 for i, v in enumerate(idx_test_sublist):
 	
 	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(v), edge_index, args.n_layers + 1, features, labels)
@@ -93,7 +93,7 @@ for i, v in enumerate(idx_test_sublist):
 		
 		print("Output original model, full adj: {}".format(output[v]))
 		print("Output original model, sub adj: {}".format(sub_adj_pred))
-
+		
 	# Need to instantitate new cf model every time because size of P changes based on size of sub_adj
 	explainer = CFExplainer(model=model,
 							sub_adj=sub_adj,
@@ -123,6 +123,7 @@ for i, v in enumerate(idx_test_sublist):
 	                               n_momentum=args.n_momentum, num_epochs=args.num_epochs)
 	                               
 	test_cf_examples.append(cf_example)
+	
 	print("Time for {} epochs of one example ({}/{}): {:.4f}min".format(args.num_epochs, i+1, 
 			len(idx_test_sublist), (time.time() - start)/60))
 	

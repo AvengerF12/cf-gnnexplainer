@@ -71,18 +71,19 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-for i in idx_test[:20]:
+for i in idx_test[:]:
 	best_loss = np.inf
+	
+	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(i), edge_index, args.n_layers + 1, features, labels)
+	new_idx = node_dict[int(i)]
+
+	# Get CF adj, new prediction
+	num_nodes = sub_adj.shape[0]
+
+	# P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
+	P_vec_size = int((num_nodes * num_nodes - num_nodes) / 2)  + num_nodes
 
 	for n in range(args.num_epochs):
-		sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(i), edge_index, args.n_layers + 1, features, labels)
-		new_idx = node_dict[int(i)]
-
-		# Get CF adj, new prediction
-		num_nodes = sub_adj.shape[0]
-
-		# P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-		P_vec_size = int((num_nodes * num_nodes - num_nodes) / 2)  + num_nodes
 
 		# Randomly initialize P_vec in [-1, 1]
 		r1 = -1
