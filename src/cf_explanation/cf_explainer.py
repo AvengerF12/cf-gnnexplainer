@@ -85,20 +85,20 @@ class CFExplainer:
 
 	def train(self, epoch):
 		t = time.time()
-		self.cf_model.train() # Set Module to training mode
+		self.cf_model.train() # Set Module to training mode (ie needed for dropout)
 		self.cf_optimizer.zero_grad()
 
 		# output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
 		# output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
 		output = self.cf_model.forward(self.x, self.A_x)
-		output_actual, self.P = self.cf_model.forward_prediction(self.x)
+		output_actual, cf_adj = self.cf_model.forward_prediction(self.x)
 
 		# Need to use new_idx from now on since sub_adj is reindexed
 		y_pred_new = torch.argmax(output[self.new_idx])
 		y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
 		# loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
-		loss_total, loss_pred, loss_graph_dist, cf_adj = \
+		loss_total, loss_pred, loss_graph_dist = \
 			self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
 		loss_total.backward()
 		clip_grad_norm_(self.cf_model.parameters(), 2.0)

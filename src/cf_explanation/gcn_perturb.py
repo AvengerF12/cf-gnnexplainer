@@ -88,14 +88,15 @@ class GCNSyntheticPerturb(nn.Module):
 		if self.edge_additions:         # Learn new adj matrix directly
 			A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
 		else:       # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-			A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(self.num_nodes)       # Use sigmoid to bound P_hat in [0,1]
+			A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
 
-		D_tilde = get_degree_matrix(A_tilde).detach()       # Don't need gradient of this
+		# D_tilde depends on the diff P and needs to be updated using A_tilde diff
+		D_tilde = get_degree_matrix(A_tilde).detach() # Already includes eye, also we don't need its gradient
 		# Raise to power -1/2, set all infs to 0s
 		D_tilde_exp = D_tilde ** (-1 / 2)
 		D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
 
-		# Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
+		# Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
 		norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
 		x1 = F.relu(self.gc1(x, norm_adj))
@@ -126,28 +127,22 @@ class GCNSyntheticPerturb(nn.Module):
 		x2 = F.dropout(x2, self.dropout, training=self.training)
 		x3 = self.gc3(x2, norm_adj)
 		x = self.lin(torch.cat((x1, x2, x3), dim=1))
-		return F.log_softmax(x, dim=1), self.P
+		return F.log_softmax(x, dim=1), A_tilde
 
 
 	def loss(self, output, y_pred_orig, y_pred_new_actual):
 		pred_same = (y_pred_new_actual == y_pred_orig).float() # Comparing with non-diff prediction
 
-		# Need dim >=2 for F.nll_loss to work
-		output = output.unsqueeze(0)
-		y_pred_orig = y_pred_orig.unsqueeze(0)
-
 		if self.edge_additions:
-			cf_adj_hat = self.P_hat_symm
+			cf_adj = self.P
 		else:
-			cf_adj_hat = torch.mul(self.P_hat_symm, self.adj)
+			cf_adj = self.P * self.adj
 
 		# Want negative in front to maximize loss instead of minimizing it to find CFs
 		loss_pred = - F.nll_loss(output, y_pred_orig)
-		loss_graph_dist = sum(sum(abs(cf_adj_hat - self.adj))) / 2      # Number of edges changed (symmetrical)
+		loss_graph_dist = sum(sum(abs(cf_adj - self.adj))) / 2      # Number of edges changed (symmetrical)
 
 		# Zero-out loss_pred with pred_same if prediction flips
 		loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
 
-		cf_adj = (torch.sigmoid(cf_adj_hat) >= 0.5).float()      # threshold
-
-		return loss_total, loss_pred, loss_graph_dist, cf_adj
+		return loss_total, loss_pred, loss_graph_dist
