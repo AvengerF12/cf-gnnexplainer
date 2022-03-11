@@ -30,12 +30,8 @@ parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov mome
 parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
 parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
 parser.add_argument('--edge_additions', type=int, default=0, help='Include edge additions?')
-parser.add_argument('--device', default='cpu', help='CPU or GPU.')
 args = parser.parse_args()
 
-print(args)
-
-args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.autograd.set_detect_anomaly(True)
@@ -43,7 +39,7 @@ torch.autograd.set_detect_anomaly(True)
 
 # Import dataset from GNN explainer paper
 with open("../data/gnn_explainer/{}.pickle".format(args.dataset[:4]), "rb") as f:
-	data = pickle.load(f)
+    data = pickle.load(f)
 
 adj = torch.Tensor(data["adj"]).squeeze()       # Does not include self loops
 features = torch.Tensor(data["feat"]).squeeze()
@@ -58,15 +54,15 @@ edge_additions_bool = args.edge_additions == 1
 
 # Change to binary task: 0 if not in house, 1 if in house
 if args.dataset == "syn1_binary":
-	labels[labels==2] = 1
-	labels[labels==3] = 1
+    labels[labels==2] = 1
+    labels[labels==3] = 1
 
 norm_adj = normalize_adj(adj)       # According to reparam trick from GCN paper
 
 
 # Set up original model, get predictions
 model = GCNSynthetic(nfeat=features.shape[1], nhid=args.hidden, nout=args.hidden,
-					 nclass=len(labels.unique()), dropout=args.dropout)
+                     nclass=len(labels.unique()), dropout=args.dropout)
 
 model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(args.dataset)))
 model.eval()
@@ -80,68 +76,64 @@ print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_coun
 # Get CF examples in test set
 test_cf_examples = []
 start = time.time()
-idx_test_sublist = idx_test[:50] #Note: these are the nodes for which a cf is generated
+idx_test_sublist = idx_test[:] #Note: these are the nodes for which a cf is generated
+
 for i, v in enumerate(idx_test_sublist):
-	
-	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(v), edge_index, args.n_layers + 1, features, labels)
-	new_idx = node_dict[int(v)]
 
-	# Check that original model gives same prediction on full graph and subgraph
-	with torch.no_grad():
-		
-		sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
-		
-		print("Output original model, full adj: {}".format(output[v]))
-		print("Output original model, sub adj: {}".format(sub_adj_pred))
-		
-	# Need to instantitate new cf model every time because size of P changes based on size of sub_adj
-	explainer = CFExplainer(model=model,
-							sub_adj=sub_adj,
-							sub_feat=sub_feat,
-							n_hid=args.hidden,
-							dropout=args.dropout,
-							sub_labels=sub_labels,
-							y_pred_orig=y_pred_orig[v],
-							num_classes = len(labels.unique()),
-							beta=args.beta,
-							device=args.device,
-							edge_additions=edge_additions_bool) 
-							# If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
+    sub_adj, sub_feat, sub_labels, node_dict = \
+        get_neighbourhood(int(v), edge_index, args.n_layers + 1, features, labels)
+    new_idx = node_dict[int(v)]
 
-	# Move data to cuda device
-	if args.device == 'cuda':
-		model.cuda()
-		explainer.cf_model.cuda()
-		adj = adj.cuda()
-		norm_adj = norm_adj.cuda()
-		features = features.cuda()
-		labels = labels.cuda()
-		idx_train = idx_train.cuda()
-		idx_test = idx_test.cuda()
+    # Check that original model gives same prediction on full graph and subgraph
+    with torch.no_grad():
 
-	cf_example = explainer.explain(node_idx=v, cf_optimizer=args.optimizer, new_idx=new_idx, lr=args.lr,
-	                               n_momentum=args.n_momentum, num_epochs=args.num_epochs)
-	                               
-	test_cf_examples.append(cf_example)
-	
-	print("Time for {} epochs of one example ({}/{}): {:.4f}min".format(args.num_epochs, i+1, 
-			len(idx_test_sublist), (time.time() - start)/60))
-	
+        sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
+        print("Output original model, full adj: {}".format(output[v]))
+        print("Output original model, sub adj: {}".format(sub_adj_pred))
+
+
+    # Need to instantitate new cf_model for each instance because size of P
+    # changes based on size of sub_adj
+    explainer = CFExplainer(model=model,
+                            sub_adj=sub_adj,
+                            sub_feat=sub_feat,
+                            n_hid=args.hidden,
+                            dropout=args.dropout,
+                            sub_labels=sub_labels,
+                            y_pred_orig=y_pred_orig[v],
+                            num_classes = len(labels.unique()),
+                            beta=args.beta,
+                            edge_additions=edge_additions_bool)
+    # If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
+
+    cf_example = explainer.explain(node_idx=v, cf_optimizer=args.optimizer, new_idx=new_idx,
+                                   lr=args.lr, n_momentum=args.n_momentum,
+                                   num_epochs=args.num_epochs)
+
+    test_cf_examples.append(cf_example)
+
+    print("Time for {} epochs of one example ({}/{}): {:.4f}min".format(args.num_epochs, i+1,
+                                                                        len(idx_test_sublist),
+                                                                        (time.time() - start)/60))
+
 print("Total time elapsed: {:.4f}s".format((time.time() - start)/60))
-print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx_test))) # Includes also empty examples!
+# Includes also empty examples!
+print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx_test)))
 
 # Save CF examples in test set
-
 if edge_additions_bool:
-	with safe_open("../results/{}_incl_additions/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
-					args.dataset, args.optimizer, args.dataset, args.lr, 
-					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
-						
-		pickle.dump(test_cf_examples, f)
-		
+
+    format_path = "../results/{}_incl_additions/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
+    dest_path = format_path.format(args.dataset, args.optimizer, args.dataset, args.lr,
+                                   args.beta, args.n_momentum, args.num_epochs)
+    with safe_open(dest_path, "wb") as f:
+        pickle.dump(test_cf_examples, f)
+
 else:
-	with safe_open("../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}".format(
-					args.dataset, args.optimizer, args.dataset, args.lr,
-					args.beta, args.n_momentum, args.num_epochs), "wb") as f:
-						 
-		pickle.dump(test_cf_examples, f)
+
+    format_path = "../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
+    dest_path = format_path.format(args.dataset, args.optimizer, args.dataset, args.lr,
+                                   args.beta, args.n_momentum, args.num_epochs)
+
+    with safe_open(dest_path, "wb") as f:
+        pickle.dump(test_cf_examples, f)

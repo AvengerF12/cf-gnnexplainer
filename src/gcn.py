@@ -7,8 +7,6 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch_geometric.nn import GCNConv
 
-
-
 class GraphConvolution(nn.Module):
     """
     Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
@@ -19,25 +17,33 @@ class GraphConvolution(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+
         if bias:
             self.bias = Parameter(torch.FloatTensor(out_features))
         else:
             self.register_parameter('bias', None)
+
         self.reset_parameters()
 
     def reset_parameters(self):
+        # Standard init: uniform dist with the number of features as param.
         stdv = 1. / math.sqrt(self.weight.size(1))
         self.weight.data.uniform_(-stdv, stdv)
+
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def forward(self, input, adj):
-        support = torch.mm(input, self.weight)
+    def forward(self, feat_mat, adj):
+        result = None
+        support = torch.mm(feat_mat, self.weight)
         output = torch.spmm(adj, support)
+
         if self.bias is not None:
-            return output + self.bias
+            result = output + self.bias
         else:
-            return output
+            result = output
+
+        return result
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
@@ -47,7 +53,7 @@ class GraphConvolution(nn.Module):
 
 class GCNSynthetic(nn.Module):
     """
-    3-layer GCN used in GNN Explainer synthetic tasks, including
+    3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, nfeat, nhid, nout, nclass, dropout):
         super(GCNSynthetic, self).__init__()
@@ -65,6 +71,7 @@ class GCNSynthetic(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
+
         return F.log_softmax(x, dim=1)
 
     def loss(self, pred, label):
