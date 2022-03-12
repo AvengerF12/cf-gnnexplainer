@@ -144,13 +144,17 @@ class GCNSyntheticPerturb(nn.Module):
         y_pred_orig = y_pred_orig.unsqueeze(0)
 
         if self.edge_additions:
-            cf_adj = self.P
+            cf_adj = self.P_hat_symm
+            cf_adj_actual = self.P
         else:
-            cf_adj = self.P * self.adj
+            cf_adj = self.P_hat_symm * self.adj
+            cf_adj_actual = self.P * self.adj
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
-        # Number of edges changed (symmetrical)
+        # Number of edges changed (symmetrical), used for the metrics
+        loss_graph_dist_actual = sum(sum(abs(cf_adj_actual - self.adj))) / 2
+        # Relaxation to continuous space of loss_graph_dist_actual, used for the loss
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj))) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
@@ -158,4 +162,4 @@ class GCNSyntheticPerturb(nn.Module):
         # It only comes into play when comparing the current loss with best loss in cf_explainer
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
 
-        return loss_total, loss_pred, loss_graph_dist, cf_adj
+        return loss_total, loss_pred, loss_graph_dist_actual, cf_adj_actual
