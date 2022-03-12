@@ -108,7 +108,8 @@ class CFExplainer:
               'Epoch: {:04d}'.format(epoch + 1),
               'loss: {:.4f}'.format(loss_total.item()),
               'pred loss: {:.4f}'.format(loss_pred.item()),
-              'graph loss: {:.4f}'.format(loss_graph_dist.item()))
+              'graph loss: {:.4f}'.format(loss_graph_dist.item()),
+              'beta: {},'.format(self.beta))
         print('Output: {}\n'.format(output[self.new_idx].data),
               'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
               'orig pred: {}, '.format(self.y_pred_orig),

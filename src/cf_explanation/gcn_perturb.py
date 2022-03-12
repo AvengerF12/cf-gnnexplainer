@@ -93,9 +93,9 @@ class GCNSyntheticPerturb(nn.Module):
         self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
 
         if self.edge_additions:	 # Learn new adj matrix directly
-            A_tilde = self.P
+            A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj
+            A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
 
         norm_adj = normalize_adj(A_tilde)
 
@@ -106,7 +106,8 @@ class GCNSyntheticPerturb(nn.Module):
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
 
-        return F.log_softmax(x, dim=1), A_tilde
+        # Note: we care about the explanation P, not the CF example A_tilde
+        return F.log_softmax(x, dim=1), self.P
 
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
