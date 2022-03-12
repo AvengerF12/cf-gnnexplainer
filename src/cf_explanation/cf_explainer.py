@@ -17,7 +17,8 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
-                  sub_labels, y_pred_orig, num_classes, beta, edge_additions=False):
+                 sub_labels, y_pred_orig, num_classes, beta, edge_additions=False,
+                 verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -31,6 +32,7 @@ class CFExplainer:
         self.beta = beta
         self.num_classes = num_classes
         self.edge_additions = edge_additions
+        self.verbose = verbose
 
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(self.sub_feat.shape[1], n_hid, n_hid,
@@ -43,10 +45,12 @@ class CFExplainer:
         for name, param in self.cf_model.named_parameters():
             if name.endswith("weight") or name.endswith("bias"):
                 param.requires_grad = False
-        for name, param in self.model.named_parameters():
-            print("orig model requires_grad: ", name, param.requires_grad)
-        for name, param in self.cf_model.named_parameters():
-            print("cf model required_grad: ", name, param.requires_grad)
+
+        if self.verbose:
+            for name, param in self.model.named_parameters():
+                print("orig model requires_grad: ", name, param.requires_grad)
+            for name, param in self.cf_model.named_parameters():
+                print("cf model required_grad: ", name, param.requires_grad)
 
     def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs):
         self.node_idx = node_idx
@@ -69,15 +73,19 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train(epoch)
-            print(loss_total, "(Current loss)")
-            print(best_loss, "(Best loss)")
+
+            if self.verbose:
+                print(loss_total, "(Current loss)")
+                print(best_loss, "(Best loss)")
+
             if new_example != [] and loss_total < best_loss:
                 best_cf_example = new_example
                 best_loss = loss_total
                 num_cf_examples += 1
 
-        print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
-        print(" ")
+        if self.verbose:
+            print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
+            print(" ")
 
         return(best_cf_example, best_loss)
 
@@ -103,19 +111,25 @@ class CFExplainer:
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
 
-        print('Node idx: {}'.format(self.node_idx),
-              'New idx: {}'.format(self.new_idx),
-              'Epoch: {:04d}'.format(epoch + 1),
-              'loss: {:.4f}'.format(loss_total.item()),
-              'pred loss: {:.4f}'.format(loss_pred.item()),
-              'graph loss: {:.4f}'.format(loss_graph_dist.item()),
-              'beta: {},'.format(self.beta))
-        print('Output: {}\n'.format(output[self.new_idx].data),
-              'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
-              'orig pred: {}, '.format(self.y_pred_orig),
-              'new pred: {}, '.format(y_pred_new),
-              'new pred nondiff: {}'.format(y_pred_new_actual))
-        print(" ")
+        # Update P matrix
+        self.cf_model.forward_prediction(self.x)
+        # Compute the thresholded distance btw the original adj matrix and perturbated one
+        loss_dist_thresh = torch.sum(torch.abs(self.A_x - self.A_x*self.cf_model.P))/2
+
+        if self.verbose:
+            print('Node idx: {}'.format(self.node_idx),
+                  'New idx: {}'.format(self.new_idx),
+                  'Epoch: {:04d}'.format(epoch + 1),
+                  'loss: {:.4f}'.format(loss_total.item()),
+                  'pred loss: {:.4f}'.format(loss_pred.item()),
+                  'graph loss: {:.4f}'.format(loss_graph_dist.item()),
+                  'beta: {},'.format(self.beta))
+            print('Output: {}\n'.format(output[self.new_idx].data),
+                  'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
+                  'orig pred: {}, '.format(self.y_pred_orig),
+                  'new pred: {}, '.format(y_pred_new),
+                  'new pred nondiff: {}'.format(y_pred_new_actual))
+            print(" ")
 
         cf_stats = []
         if y_pred_new_actual != self.y_pred_orig:
@@ -123,6 +137,6 @@ class CFExplainer:
                         cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new_actual.item(),
                         self.sub_labels[self.new_idx].numpy(),
-                        self.sub_adj.shape[0], loss_graph_dist.item()]
+                        self.sub_adj.shape[0], loss_dist_thresh]
 
         return(cf_stats, loss_total.item())
