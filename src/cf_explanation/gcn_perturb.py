@@ -114,9 +114,9 @@ class GCNSyntheticPerturb(nn.Module):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         if self.edge_additions:
-            cf_adj = self.P
+            cf_adj = self.P_hat_symm
         else:
-            cf_adj = self.P * self.adj
+            cf_adj = self.P_hat_symm * self.adj
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
