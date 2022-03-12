@@ -16,7 +16,7 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
-                 sub_labels, y_pred_orig, num_classes, beta, device, edge_additions=False):
+                 sub_labels, y_pred_orig, num_classes, beta, edge_additions=False):
         super(CFExplainer, self).__init__()
         self.model = model
         self.model.eval()
@@ -28,7 +28,6 @@ class CFExplainer:
         self.y_pred_orig = y_pred_orig
         self.beta = beta
         self.num_classes = num_classes
-        self.device = device
         self.edge_additions = edge_additions
 
         # Instantiate CF model class, load weights from original model
