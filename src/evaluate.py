@@ -56,11 +56,15 @@ for subdir, dirs, files in os.walk(filepath):
         output = model(features, norm_adj)
         y_pred_orig = torch.argmax(output, dim=1)
 
+        num_cf_examples = None
         # Load CF examples
         with open(path, "rb") as f:
             cf_examples = pickle.load(f)
+            num_cf_examples = len(cf_examples)
             df_prep = []
+
             for example in cf_examples:
+                # Ignore examples for which generating a CF wasn't possible
                 if example[0] != []:
                     df_prep.append(example[0])
             df = pd.DataFrame(df_prep, columns=header)
@@ -123,8 +127,8 @@ for subdir, dirs, files in os.walk(filepath):
 
         print(path)
         print("Dataset name: {}".format(dataset_name))
-        print("Num cf examples found: {}/{}".format(len(df), len(idx_test)))
-        print("Avg fidelity: {}".format(1 - len(df) / len(idx_test)))
+        print("Num cf examples found: {}/{}".format(len(df), num_cf_examples))
+        print("Avg fidelity: {}".format(1 - len(df) / num_cf_examples))
         print("Average graph distance: {}".format(np.mean(df["loss_graph_dist"])))
         print("Average sparsity: {}".format(np.mean(1 - df["loss_graph_dist"] / df["num_edges"])))
         print("Accuracy", np.mean(df_accuracy["prop_correct"]))
