@@ -15,7 +15,7 @@ from torch_geometric.utils import dense_to_sparse
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500,
-                 edge_additions=False):
+                 edge_additions=False, verbose=False):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -51,9 +51,11 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     model.eval()
     output = model(features, norm_adj)
     y_pred_orig = torch.argmax(output, dim=1)
-    print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
-    # Confirm model is actually doing something
-    print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_counts=True)))
+
+    if verbose:
+        print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
+        # Confirm model is actually doing something
+        print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_counts=True)))
 
     # Get CF examples in test set
     test_cf_examples = []
@@ -69,8 +71,9 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():
-
             sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
+
+        if verbose:
             print("Output original model, full adj: {}".format(output[v]))
             print("Output original model, sub adj: {}".format(sub_adj_pred))
 
@@ -86,7 +89,8 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 y_pred_orig=y_pred_orig[v],
                                 num_classes = len(labels.unique()),
                                 beta=beta,
-                                edge_additions=edge_additions)
+                                edge_additions=edge_additions,
+                                verbose=verbose)
         # If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
 
         cf_example = explainer.explain(node_idx=v, cf_optimizer=optimizer, new_idx=new_idx,
@@ -95,9 +99,10 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
         test_cf_examples.append(cf_example)
 
-        time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
-        print(time_frmt_str.format(num_epochs, i+1, len(idx_test_sublist),
-                                   (time.time() - start)/60))
+        if verbose:
+            time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
+            print(time_frmt_str.format(num_epochs, i+1, len(idx_test_sublist),
+                                       (time.time() - start)/60))
 
     print("Total time elapsed: {:.4f}s".format((time.time() - start)/60))
     # Includes also empty examples!
