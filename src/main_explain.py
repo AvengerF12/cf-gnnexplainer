@@ -61,7 +61,8 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     test_cf_examples = []
     start = time.time()
     #Note: these are the nodes for which a cf is generated
-    idx_test_sublist = idx_test[:20]
+    idx_test_sublist = idx_test[:50]
+    num_cf_found = 0
 
     for i, v in enumerate(idx_test_sublist):
 
@@ -99,14 +100,18 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
         test_cf_examples.append(cf_example)
 
+        # Check if cf example is not empty
+        if cf_example[0] != []:
+            num_cf_found += 1
+
         if verbose:
             time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
             print(time_frmt_str.format(num_epochs, i+1, len(idx_test_sublist),
                                        (time.time() - start)/60))
 
-    print("Total time elapsed: {:.4f}s".format((time.time() - start)/60))
+    print("Total time elapsed: {:.4f} mins".format((time.time() - start)/60))
     # Includes also empty examples!
-    print("Number of CF examples found: {}/{}".format(len(test_cf_examples), len(idx_test)))
+    print("Number of CF examples found: {}/{}".format(num_cf_found, len(idx_test_sublist)))
 
     # Save CF examples in test set
     if edge_additions:
