@@ -122,7 +122,15 @@ class GCNSyntheticPerturb(nn.Module):
             Pert_mat = torch.ones(self.P.shape) - self.P
             A_tilde = self.adj*Pert_mat + torch.eye(self.num_nodes)
 
-        norm_adj = normalize_adj(A_tilde)
+         # D_tilde depends on the diff P and needs to be updated using A_tilde diff
+        # Note: it already includes eye, also we don't need its gradient
+        D_tilde = get_degree_matrix(A_tilde)
+        # Raise to power -1/2, set all infs to 0s
+        D_tilde_exp = D_tilde ** (-1 / 2)
+        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+
+        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
+        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
         x1 = F.relu(self.gc1(x, norm_adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)

@@ -26,18 +26,6 @@ def get_degree_matrix(adj):
     return torch.diag(sum(adj))
 
 
-def normalize_adj(adj):
-    # Normalize adjacancy matrix according to reparam trick in GCN paper
-    A_tilde = adj + torch.eye(adj.shape[0])
-    D_tilde = get_degree_matrix(A_tilde)
-    # Raise to power -1/2, set all infs to 0s
-    D_tilde_exp = D_tilde ** (-1 / 2)
-    D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-    # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
-    norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-    return norm_adj
-
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
     edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index[0])  # Get all nodes involved
     edge_subset_relabel = subgraph(edge_subset[0], edge_index[0], relabel_nodes=True)  # Get relabelled subset of edges
