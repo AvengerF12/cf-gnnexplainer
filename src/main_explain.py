@@ -153,11 +153,13 @@ if __name__ == "__main__":
     parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
     parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
     parser.add_argument('--edge_additions', type=int, default=0, help='Include edge additions?')
+    parser.add_argument('--verbose', type=int, default=0, help='Activate verbose output?')
 
     args = parser.parse_args()
 
     edge_additions_bool = args.edge_additions == 1
+    verbose_bool = args.verbose == 1
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed,
                  args.lr, args.optimizer, args.n_momentum, args.beta, args.num_epochs,
-                 edge_additions_bool)
+                 edge_additions_bool, verbose_bool)
