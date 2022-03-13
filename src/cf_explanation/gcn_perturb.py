@@ -7,7 +7,28 @@ from utils.utils import get_degree_matrix, normalize_adj, create_symm_matrix_fro
 from gcn import GraphConvolution, GCNSynthetic
 
 
+class BernoulliMLSample(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, input):
+
+        ctx.save_for_backward(input)
+
+        output = torch.empty(input.shape)
+        # ML sampling
+        output[input >= 0.5] = 1
+        output[input < 0.5] = 0
+
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        # Pass-through estimator of bernoulli
+        return grad_output
+
+
 class GCNSyntheticPerturb(nn.Module):
+
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
@@ -26,7 +47,7 @@ class GCNSyntheticPerturb(nn.Module):
         if self.edge_additions:
             self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
         else:
-            self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
+            self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
 
         self.reset_parameters()
 
@@ -50,19 +71,21 @@ class GCNSyntheticPerturb(nn.Module):
 
                 torch.add(self.P_vec, torch.FloatTensor(adj_vec), out=self.P_vec)
             else:
-                torch.sub(self.P_vec, eps, out=self.P_vec)
+                torch.add(self.P_vec, eps, out=self.P_vec)
 
 
     def forward(self, x, sub_adj):
 
+        BML = BernoulliMLSample.apply
         self.sub_adj = sub_adj
         # Same as normalize_adj in utils.py except includes P_hat in A_tilde
         self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)
 
         if self.edge_additions: # Learn new adj matrix directly, starting from current adj
-            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
+            A_tilde = BML(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
         else:       # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
+            Pert_mat = torch.ones(self.P_hat_symm.shape) - BML(self.P_hat_symm)
+            A_tilde = self.sub_adj*Pert_mat + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
 
         # D_tilde depends on the diff P and needs to be updated using A_tilde diff
         # Note: it already includes eye, also we don't need its gradient
@@ -89,13 +112,15 @@ class GCNSyntheticPerturb(nn.Module):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
 
+        BML = BernoulliMLSample.apply
         # Note: pytorch is able to backprop through a threshold function using sub-gradients
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        self.P = BML(self.P_hat_symm)  # threshold P_hat
 
         if self.edge_additions:	 # Learn new adj matrix directly
             A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
+            Pert_mat = torch.ones(self.P.shape) - self.P
+            A_tilde = self.adj*Pert_mat + torch.eye(self.num_nodes)
 
         norm_adj = normalize_adj(A_tilde)
 
@@ -113,16 +138,11 @@ class GCNSyntheticPerturb(nn.Module):
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
-        if self.edge_additions:
-            cf_adj = self.P_hat_symm
-        else:
-            cf_adj = self.P_hat_symm * self.adj
-
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
         # Number of edges changed (symmetrical)
-        loss_graph_dist = sum(sum(abs(cf_adj - self.adj))) / 2
+        loss_l1_perturb = sum(sum(abs(self.P)))
         # Zero-out loss_pred with pred_same if prediction flips
-        loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
+        loss_total = pred_same * loss_pred + self.beta * loss_l1_perturb
 
-        return loss_total, loss_pred, loss_graph_dist
+        return loss_total, loss_pred, loss_l1_perturb
