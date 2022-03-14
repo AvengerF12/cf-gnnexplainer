@@ -147,7 +147,6 @@ class GCNSyntheticPerturb(nn.Module):
             cf_adj = self.P
         else:
             cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
@@ -155,6 +154,8 @@ class GCNSyntheticPerturb(nn.Module):
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj))) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
+        # Note: the distance loss is non-differentiable => it's not optimized directly.
+        # It only comes into play when comparing the current loss with best loss in cf_explainer
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
 
         return loss_total, loss_pred, loss_graph_dist, cf_adj
