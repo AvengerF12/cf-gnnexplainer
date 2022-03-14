@@ -115,11 +115,17 @@ class GCNSyntheticPerturb(nn.Module):
         self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()      # threshold P_hat
 
         if self.edge_additions:		# Learn new adj matrix directly
-            A_tilde = self.P
+            A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj
+            A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
 
-        norm_adj = normalize_adj(A_tilde)
+        D_tilde = get_degree_matrix(A_tilde)
+        # Raise to power -1/2, set all infs to 0s
+        D_tilde_exp = D_tilde ** (-1 / 2)
+        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+
+        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
+        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
         x1 = F.relu(self.gc1(x, norm_adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
