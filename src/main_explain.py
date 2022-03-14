@@ -61,7 +61,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     test_cf_examples = []
     start = time.time()
     #Note: these are the nodes for which a cf is generated
-    idx_test_sublist = idx_test[:50]
+    idx_test_sublist = idx_test[:20]
     num_cf_found = 0
 
     for i, v in enumerate(idx_test_sublist):

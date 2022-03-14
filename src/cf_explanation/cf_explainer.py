@@ -110,11 +110,6 @@ class CFExplainer:
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
 
-        # Update P matrix
-        self.cf_model.forward_prediction(self.x)
-        # Compute the thresholded distance btw the original adj matrix and perturbated one
-        loss_dist_thresh = torch.sum(torch.abs(self.A_x - self.A_x*self.cf_model.P))/2
-
         if self.verbose:
             print('Node idx: {}'.format(self.node_idx),
                   'New idx: {}'.format(self.new_idx),
@@ -136,6 +131,6 @@ class CFExplainer:
                         cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new_actual.item(),
                         self.sub_labels[self.new_idx].numpy(),
-                        self.sub_adj.shape[0], loss_dist_thresh]
+                        self.sub_adj.shape[0], loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())
