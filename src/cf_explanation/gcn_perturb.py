@@ -133,7 +133,7 @@ class GCNSyntheticPerturb(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1), self.P
+        return F.log_softmax(x, dim=1)
 
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):

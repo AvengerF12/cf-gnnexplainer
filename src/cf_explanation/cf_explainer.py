@@ -97,7 +97,7 @@ class CFExplainer:
         # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
         # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
         output = self.cf_model.forward(self.x, self.A_x)
-        output_actual, self.P = self.cf_model.forward_prediction(self.x)
+        output_actual = self.cf_model.forward_prediction(self.x)
 
         # Need to use new_idx from now on since sub_adj is reindexed
         y_pred_new = torch.argmax(output[self.new_idx])
