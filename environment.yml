@@ -16,4 +16,5 @@ dependencies:
   - numpy=1.19.*
   - numpy-base=1.19.*
   - pandas=1.1.*
+  - joblib=1.1.*
   - jupyter
