@@ -7,7 +7,8 @@ import numpy as np
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
-from .gcn_perturb import GCNSyntheticPerturb
+from .gcn_perturb_orig import GCNSyntheticPerturbOrig
+from .gcn_perturb_delta import GCNSyntheticPerturbDelta
 from utils.utils import normalize_adj
 
 
@@ -34,9 +35,9 @@ class CFExplainer:
         self.verbose = verbose
 
         # Instantiate CF model class, load weights from original model
-        self.cf_model = GCNSyntheticPerturb(self.sub_feat.shape[1], n_hid, n_hid,
-                                            self.num_classes, self.sub_adj, dropout, beta,
-                                            edge_additions=self.edge_additions)
+        self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
+                                                self.num_classes, self.sub_adj, dropout, beta,
+                                                edge_additions=self.edge_additions)
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 

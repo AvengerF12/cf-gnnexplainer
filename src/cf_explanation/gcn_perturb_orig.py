@@ -7,12 +7,12 @@ from utils.utils import get_degree_matrix, normalize_adj, create_symm_matrix_fro
 from gcn import GraphConvolution, GCNSynthetic
 
 
-class GCNSyntheticPerturb(nn.Module):
+class GCNSyntheticPerturbOrig(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_additions=False):
-        super(GCNSyntheticPerturb, self).__init__()
+        super(GCNSyntheticPerturbOrig, self).__init__()
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
