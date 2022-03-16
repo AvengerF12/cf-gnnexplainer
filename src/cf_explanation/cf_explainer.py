@@ -57,8 +57,7 @@ class CFExplainer:
         self.new_idx = new_idx
 
         self.x = self.sub_feat
-        self.A_x = self.sub_adj
-        self.D_x = get_degree_matrix(self.A_x)
+        self.D_x = get_degree_matrix(self.sub_adj)
 
         if cf_optimizer == "SGD" and n_momentum == 0.0:
             self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr)
@@ -90,13 +89,12 @@ class CFExplainer:
 
 
     def train(self, epoch):
-        t = time.time()
         self.cf_model.train() # Set Module to training mode
         self.cf_optimizer.zero_grad()
 
         # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
         # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
-        output = self.cf_model.forward(self.x, self.A_x)
+        output = self.cf_model.forward(self.x)
         output_actual = self.cf_model.forward_prediction(self.x)
 
         # Need to use new_idx from now on since sub_adj is reindexed

@@ -36,13 +36,13 @@ class GraphConvolutionPerturb(nn.Module):
             + str(self.out_features) + ')'
 
 
-
 class GCNSyntheticPerturb(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_additions=False):
         super(GCNSyntheticPerturb, self).__init__()
+        # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
@@ -67,7 +67,6 @@ class GCNSyntheticPerturb(nn.Module):
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
-        print(self.P_vec)
         with torch.no_grad():
             if self.edge_additions:
                 adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size).numpy()
@@ -81,17 +80,16 @@ class GCNSyntheticPerturb(nn.Module):
                 torch.sub(self.P_vec, eps, out=self.P_vec)
 
 
-    def forward(self, x, sub_adj): # Signature required by pytorch
-        self.sub_adj = sub_adj
+    def forward(self, x):
         # Same as normalize_adj in utils.py except includes P_hat in A_tilde
-        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)      # Ensure symmetry
+        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
 
         if self.edge_additions:         # Learn new adj matrix directly
             A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
         else:       # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(self.num_nodes)       # Use sigmoid to bound P_hat in [0,1]
+            A_tilde = torch.sigmoid(self.P_hat_symm) * self.adj + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
 
-        D_tilde = get_degree_matrix(A_tilde).detach()       # Don't need gradient of this
+        D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
         # Raise to power -1/2, set all infs to 0s
         D_tilde_exp = D_tilde ** (-1 / 2)
         D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
@@ -111,10 +109,9 @@ class GCNSyntheticPerturb(nn.Module):
     def forward_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # Threshold P_hat
 
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()      # threshold P_hat
-
-        if self.edge_additions:		# Learn new adj matrix directly
+        if self.edge_additions:	 # Learn new adj matrix directly (add/remove edges)
             A_tilde = self.P + torch.eye(self.num_nodes)
         else:
             A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
@@ -139,10 +136,6 @@ class GCNSyntheticPerturb(nn.Module):
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
-        # Need dim >=2 for F.nll_loss to work
-        output = output.unsqueeze(0)
-        y_pred_orig = y_pred_orig.unsqueeze(0)
-
         if self.edge_additions:
             cf_adj = self.P_hat_symm
             cf_adj_actual = self.P
@@ -160,6 +153,8 @@ class GCNSyntheticPerturb(nn.Module):
         # Zero-out loss_pred with pred_same if prediction flips
         # Note: the distance loss is non-differentiable => it's not optimized directly.
         # It only comes into play when comparing the current loss with best loss in cf_explainer
+        # The results obtained using the hyperparameters on the original paper are identical
+        # w/wo the dist loss.
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
 
         return loss_total, loss_pred, loss_graph_dist_actual, cf_adj_actual
