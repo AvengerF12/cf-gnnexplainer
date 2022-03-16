@@ -52,6 +52,7 @@ class GCNSyntheticPerturb(nn.Module):
         # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)  + self.num_nodes
 
+        # P_vec is the only parameter
         if self.edge_additions:
             self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
         else:
@@ -65,6 +66,17 @@ class GCNSyntheticPerturb(nn.Module):
         self.lin = nn.Linear(nhid + nhid + nout, nclass)
         self.dropout = dropout
 
+    def __apply_model(self, x, norm_adj):
+
+        x1 = F.relu(self.gc1(x, norm_adj))
+        x1 = F.dropout(x1, self.dropout, training=self.training)
+        x2 = F.relu(self.gc2(x1, norm_adj))
+        x2 = F.dropout(x2, self.dropout, training=self.training)
+        x3 = self.gc3(x2, norm_adj)
+        x = self.lin(torch.cat((x1, x2, x3), dim=1))
+
+        return x
+
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
         with torch.no_grad():
@@ -75,73 +87,45 @@ class GCNSyntheticPerturb(nn.Module):
                         adj_vec[i] = adj_vec[i] - eps
                     else:
                         adj_vec[i] = adj_vec[i] + eps
-                torch.add(self.P_vec, torch.FloatTensor(adj_vec), out=self.P_vec)       #self.P_vec is all 0s
+                torch.add(self.P_vec, torch.FloatTensor(adj_vec), out=self.P_vec)  #self.P_vec is all 0s
             else:
                 torch.sub(self.P_vec, eps, out=self.P_vec)
 
 
     def forward(self, x):
-        # Same as normalize_adj in utils.py except includes P_hat in A_tilde
-        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P = (torch.sigmoid(P_hat_symm) >= 0.5).float()  # Threshold P_hat
 
-        if self.edge_additions:         # Learn new adj matrix directly
-            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
-        else:       # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = torch.sigmoid(self.P_hat_symm) * self.adj + torch.eye(self.num_nodes)  # Use sigmoid to bound P_hat in [0,1]
+        # Note: identity matrix is added in normalize_adj()
+        if self.edge_additions:  # Learn new adj matrix directly
+            # Use sigmoid to bound P_hat in [0,1]
+            A_tilde_diff = torch.sigmoid(P_hat_symm)
+            A_tilde_pred = P
+        else:       # Learn only P_hat => only edge deletions
+            A_tilde_diff = torch.sigmoid(P_hat_symm) * self.adj
+            A_tilde_pred = P * self.adj
 
-        D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+        norm_adj_diff = normalize_adj(A_tilde_diff)
+        norm_adj_pred = normalize_adj(A_tilde_pred)
 
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+        output_diff = self.__apply_model(x, norm_adj_diff)
+        output_pred = self.__apply_model(x, norm_adj_pred)
 
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1)
-
-
-    def forward_prediction(self, x):
-        # Same as forward but uses P instead of P_hat ==> non-differentiable
-        # but needed for actual predictions
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # Threshold P_hat
-
-        if self.edge_additions:	 # Learn new adj matrix directly (add/remove edges)
-            A_tilde = self.P + torch.eye(self.num_nodes)
-        else:
-            A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
-
-        D_tilde = get_degree_matrix(A_tilde)
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1)
+        return F.log_softmax(output_diff, dim=1), F.log_softmax(output_pred, dim=1)
 
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
+        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P = (torch.sigmoid(P_hat_symm) >= 0.5).float()  # Threshold P_hat
+
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         if self.edge_additions:
-            cf_adj = self.P_hat_symm
-            cf_adj_actual = self.P
+            cf_adj = P_hat_symm
+            cf_adj_actual = P
         else:
-            cf_adj = self.P_hat_symm * self.adj
-            cf_adj_actual = self.P * self.adj
+            cf_adj = P_hat_symm * self.adj
+            cf_adj_actual = P * self.adj
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)

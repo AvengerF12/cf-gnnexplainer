@@ -23,19 +23,20 @@ def safe_open(path, w):
 
 
 def get_degree_matrix(adj):
+    # Output: vector containing the sum for each row
     return torch.diag(sum(adj))
-
 
 def normalize_adj(adj):
     # Normalize adjacancy matrix according to reparam trick in GCN paper
     A_tilde = adj + torch.eye(adj.shape[0])
-    D_tilde = get_degree_matrix(A_tilde)
+    D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient
     # Raise to power -1/2, set all infs to 0s
     D_tilde_exp = D_tilde ** (-1 / 2)
     D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
 
     # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
     norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+
     return norm_adj
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
