@@ -14,14 +14,18 @@ from gcn import GCNSynthetic
 from utils.utils import normalize_adj, get_neighbourhood
 
 
-filepath = "../results/"
+default_path = "../results/"
 
 header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "y_pred_orig", "y_pred_new_actual",
           "label", "num_nodes", "loss_graph_dist"]
 hidden = 20
 dropout = 0.0
 
-for subdir, dirs, files in os.walk(filepath):
+parser = argparse.ArgumentParser()
+parser.add_argument('--res_path', default=default_path)
+args = parser.parse_args()
+
+for subdir, dirs, files in os.walk(args.res_path):
     for file in files:
         path = os.path.join(subdir, file)
 
