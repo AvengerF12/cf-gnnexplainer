@@ -6,35 +6,6 @@ from torch.nn.parameter import Parameter
 from utils.utils import get_degree_matrix, normalize_adj, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from gcn import GraphConvolution, GCNSynthetic
 
-class GraphConvolutionPerturb(nn.Module):
-    """
-    Similar to GraphConvolution except includes P_hat
-    """
-
-    def __init__(self, in_features, out_features, bias=True):
-        super(GraphConvolutionPerturb, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
-        if bias is not None:
-            self.bias = Parameter(torch.FloatTensor(out_features))
-        else:
-            self.register_parameter('bias', None)
-
-
-    def forward(self, input, adj):
-        support = torch.mm(input, self.weight)
-        output = torch.mm(adj, support)
-        if self.bias is not None:
-            return output + self.bias
-        else:
-            return output
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' \
-            + str(self.in_features) + ' -> ' \
-            + str(self.out_features) + ')'
-
 
 class GCNSyntheticPerturb(nn.Module):
     """
@@ -47,10 +18,12 @@ class GCNSyntheticPerturb(nn.Module):
         self.nclass = nclass
         self.beta = beta
         self.num_nodes = self.adj.shape[0]
-        self.edge_additions = edge_additions      # are edge additions included in perturbed matrix
+        self.edge_additions = edge_additions  # are edge additions included in perturbed matrix
 
-        # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)  + self.num_nodes
+        # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower
+        # triangular matrix and use to populate P_hat later
+        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)\
+            + self.num_nodes
 
         # P_vec is the only parameter
         if self.edge_additions:
@@ -60,8 +33,8 @@ class GCNSyntheticPerturb(nn.Module):
 
         self.reset_parameters()
 
-        self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
-        self.gc2 = GraphConvolutionPerturb(nhid, nhid)
+        self.gc1 = GraphConvolution(nfeat, nhid)
+        self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
         self.lin = nn.Linear(nhid + nhid + nout, nclass)
         self.dropout = dropout
@@ -87,7 +60,8 @@ class GCNSyntheticPerturb(nn.Module):
                         adj_vec[i] = adj_vec[i] - eps
                     else:
                         adj_vec[i] = adj_vec[i] + eps
-                torch.add(self.P_vec, torch.FloatTensor(adj_vec), out=self.P_vec)  #self.P_vec is all 0s
+                # self.P_vec is all 0s
+                torch.add(self.P_vec, torch.FloatTensor(adj_vec), out=self.P_vec)
             else:
                 torch.sub(self.P_vec, eps, out=self.P_vec)
 

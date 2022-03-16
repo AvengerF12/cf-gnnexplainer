@@ -35,7 +35,7 @@ class CFExplainer:
 
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(self.sub_feat.shape[1], n_hid, n_hid,
-                                            self.num_classes, self.sub_adj, dropout, beta, 
+                                            self.num_classes, self.sub_adj, dropout, beta,
                                             edge_additions=self.edge_additions)
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
