@@ -95,6 +95,9 @@ class CFExplainer:
         if best_cf_example != [] and 1 in np.diag(best_cf_example[2]):
             raise RuntimeError("cf_explainer: cf_adj contains a self-connection. Invalid result.")
 
+        if best_cf_example != [] and np.any(np.greater(best_cf_example[2], 1)):
+            raise RuntimeError("cf_explainer: cf_adj contains values > 1. Invalid result.")
+
         if self.verbose:
             print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
             print(" ")

@@ -29,7 +29,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower
         # triangular matrix and use to populate P_hat later
-        # Note: no diagonal, it is assumed to be always 0
+        # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)
 
         # P_vec is the only parameter
@@ -76,16 +76,19 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
 
     def forward(self, x):
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
-        P = (torch.sigmoid(P_hat_symm) >= 0.5).float()  # Threshold P_hat
+        # Applying sigmoid on P_vec instead of P_hat_symm avoids problems with
+        # diagonal equal to 1 when using edge_add, since sigmoid(0)=0.5
+        P_vec_hat = torch.sigmoid(self.P_vec)
+        P_hat_symm = create_symm_matrix_from_vec(P_vec_hat, self.num_nodes)  # Ensure symmetry
+        P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         # Note: identity matrix is added in normalize_adj()
         if self.edge_add:  # Learn new adj matrix directly
             # Use sigmoid to bound P_hat in [0,1]
-            A_tilde_diff = torch.sigmoid(P_hat_symm)
+            A_tilde_diff = P_hat_symm
             A_tilde_pred = P
-        else:       # Learn only P_hat => only edge deletions
-            A_tilde_diff = torch.sigmoid(P_hat_symm) * self.adj
+        else:  # Learn only P_hat => only edge deletions
+            A_tilde_diff = P_hat_symm * self.adj
             A_tilde_pred = P * self.adj
 
         norm_adj_diff = normalize_adj(A_tilde_diff)
@@ -98,16 +101,17 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
-        P = (torch.sigmoid(P_hat_symm) >= 0.5).float()  # Threshold P_hat
+        P_vec_hat = torch.sigmoid(self.P_vec)
+        P_hat_symm = create_symm_matrix_from_vec(P_vec_hat, self.num_nodes)  # Ensure symmetry
+        P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         if self.edge_add:
-            cf_adj = torch.sigmoid(P_hat_symm)
+            cf_adj = P_hat_symm
             cf_adj_actual = P
         else:
-            cf_adj = torch.sigmoid(P_hat_symm) * self.adj
+            cf_adj = P_hat_symm * self.adj
             cf_adj_actual = P * self.adj
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
