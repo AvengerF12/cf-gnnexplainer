@@ -6,6 +6,26 @@ import pandas as pd
 from torch_geometric.utils import k_hop_subgraph, dense_to_sparse, to_dense_adj, subgraph
 
 
+# Used to implement Bernoulli rv approach to P generation in Srinivas paper (TODO)
+class BernoulliMLSample(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, input):
+
+        ctx.save_for_backward(input)
+
+        output = torch.empty(input.shape)
+        # ML sampling
+        output[input >= 0.5] = 1
+        output[input < 0.5] = 0
+
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        # Pass-through estimator of bernoulli
+        return grad_output
+
 def mkdir_p(path):
     try:
         os.makedirs(path)
@@ -51,15 +71,18 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
     return sub_adj, sub_feat, sub_labels, node_dict
 
 
+# Note: the diagonal is assumed equal to 0
+# the input vector contains everything below the diag
 def create_symm_matrix_from_vec(vector, n_rows):
     matrix = torch.zeros(n_rows, n_rows)
-    idx = torch.tril_indices(n_rows, n_rows)
+    idx = torch.tril_indices(n_rows, n_rows, -1)
     matrix[idx[0], idx[1]] = vector
     symm_matrix = torch.tril(matrix) + torch.tril(matrix, -1).t()
     return symm_matrix
 
 
+# Note: usual assumption about there being no self-connections in adj
 def create_vec_from_symm_matrix(matrix, P_vec_size):
-    idx = torch.tril_indices(matrix.shape[0], matrix.shape[0])
+    idx = torch.tril_indices(matrix.shape[0], matrix.shape[0], -1)
     vector = matrix[idx[0], idx[1]]
     return vector

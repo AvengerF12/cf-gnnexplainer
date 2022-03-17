@@ -29,8 +29,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower
         # triangular matrix and use to populate P_hat later
-        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)\
-            + self.num_nodes
+        # Note: no diagonal, it is assumed to be always 0
+        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)
 
         # P_vec is the only parameter
         if self.edge_add:
