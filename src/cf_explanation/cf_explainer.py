@@ -98,6 +98,9 @@ class CFExplainer:
         if best_cf_example != [] and np.any(np.greater(best_cf_example[2], 1)):
             raise RuntimeError("cf_explainer: cf_adj contains values > 1. Invalid result.")
 
+        if best_cf_example != [] and np.any(np.less(best_cf_example[2], 0)):
+            raise RuntimeError("cf_explainer: cf_adj contains values < 0. Invalid result.")
+
         if self.verbose:
             print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
             print(" ")

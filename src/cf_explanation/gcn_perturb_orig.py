@@ -22,8 +22,9 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         if not edge_del and not edge_add:
             raise RuntimeError("GCNSyntheticPerturbOrig: need to specify allowed add/del op")
+        elif edge_del and edge_add:
+            print("Note: in this implementation enabling edge_add allows for both add and del")
 
-        # Note: in this implementation enabling edge_add also "enables" edge del
         self.edge_del = edge_del  # Can the model delete new edges to the graph
         self.edge_add = edge_add  # Can the model add new edges to the graph
 
