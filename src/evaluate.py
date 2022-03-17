@@ -89,10 +89,6 @@ for subdir, dirs, files in os.walk(args.res_path):
         dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
                                    y_pred_orig.numpy()))
 
-        if df["loss_graph_dist"].loc[df["loss_graph_dist"] < 1].any():
-            error_str = "evaluate: loss_graph_dist cannot be smaller than 1. Check symmetry"
-            raise RuntimeError(error_str)
-
         for i in range(len(df_motif)):
             node_idx = df_motif["node_idx"][i]
             new_idx = df_motif["new_idx"][i]

@@ -8,6 +8,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
+from .gcn_perturb_bern import GCNSyntheticPerturbBern
 from utils.utils import normalize_adj
 
 
@@ -85,6 +86,15 @@ class CFExplainer:
                 best_loss = loss_total
                 num_cf_examples += 1
 
+        # Check loss_graph_dist
+        if best_cf_example != [] and best_cf_example[-1] < 1:
+            error_str = "cf_explainer: loss_graph_dist cannot be smaller than 1. Check symmetry"
+            raise RuntimeError(error_str)
+
+        # Check cf_adj
+        if best_cf_example != [] and 1 in np.diag(best_cf_example[2]):
+            raise RuntimeError("cf_explainer: cf_adj contains a self-connection. Invalid result.")
+
         if self.verbose:
             print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
             print(" ")
@@ -107,6 +117,7 @@ class CFExplainer:
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
         loss_total, loss_pred, loss_graph_dist, cf_adj = \
             self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
+
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
@@ -126,6 +137,7 @@ class CFExplainer:
                   'new pred nondiff: {}'.format(y_pred_new_actual))
             print(" ")
 
+        # Note: when updating output format, also update checks
         cf_stats = []
         if y_pred_new_actual != self.y_pred_orig:
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
