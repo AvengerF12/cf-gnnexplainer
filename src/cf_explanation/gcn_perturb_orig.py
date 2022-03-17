@@ -11,14 +11,21 @@ class GCNSyntheticPerturbOrig(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_additions=False):
+    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_del=False,
+                 edge_add=False):
         super(GCNSyntheticPerturbOrig, self).__init__()
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
         self.num_nodes = self.adj.shape[0]
-        self.edge_additions = edge_additions  # are edge additions included in perturbed matrix
+
+        if not edge_del and not edge_add:
+            raise RuntimeError("GCNSyntheticPerturbOrig: need to specify allowed add/del op")
+
+        # Note: in this implementation enabling edge_add also "enables" edge del
+        self.edge_del = edge_del  # Can the model delete new edges to the graph
+        self.edge_add = edge_add  # Can the model add new edges to the graph
 
         # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower
         # triangular matrix and use to populate P_hat later
@@ -26,7 +33,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
             + self.num_nodes
 
         # P_vec is the only parameter
-        if self.edge_additions:
+        if self.edge_add:
             self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
         else:
             self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
@@ -53,8 +60,10 @@ class GCNSyntheticPerturbOrig(nn.Module):
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
         with torch.no_grad():
-            if self.edge_additions:
+            if self.edge_add:
+                # Start from the original adj matrix
                 adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size).numpy()
+
                 for i in range(len(adj_vec)):
                     if i < 1:
                         adj_vec[i] = adj_vec[i] - eps
@@ -71,7 +80,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         P = (torch.sigmoid(P_hat_symm) >= 0.5).float()  # Threshold P_hat
 
         # Note: identity matrix is added in normalize_adj()
-        if self.edge_additions:  # Learn new adj matrix directly
+        if self.edge_add:  # Learn new adj matrix directly
             # Use sigmoid to bound P_hat in [0,1]
             A_tilde_diff = torch.sigmoid(P_hat_symm)
             A_tilde_pred = P
@@ -94,7 +103,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
-        if self.edge_additions:
+        if self.edge_add:
             cf_adj = torch.sigmoid(P_hat_symm)
             cf_adj_actual = P
         else:

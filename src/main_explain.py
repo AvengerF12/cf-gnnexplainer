@@ -15,7 +15,7 @@ from torch_geometric.utils import dense_to_sparse
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500,
-                 edge_additions=False, verbose=False):
+                 edge_del=False, edge_add=False, verbose=False):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -88,11 +88,12 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 dropout=dropout_r,
                                 sub_labels=sub_labels,
                                 y_pred_orig=y_pred_orig[v],
-                                num_classes = len(labels.unique()),
+                                num_classes=len(labels.unique()),
                                 beta=beta,
-                                edge_additions=edge_additions,
+                                edge_del=edge_del,
+                                edge_add=edge_add,
                                 verbose=verbose)
-        # If edge_additions=True: learn new adj matrix directly, else: only remove existing edges
+        # If edge_add=True: learn new adj matrix directly, else: only remove existing edges
 
         cf_example = explainer.explain(node_idx=v, cf_optimizer=optimizer, new_idx=new_idx,
                                        lr=lr, n_momentum=n_momentum,
@@ -114,9 +115,9 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     print("Number of CF examples found: {}/{}".format(num_cf_found, len(idx_test_sublist)))
 
     # Save CF examples in test set
-    if edge_additions:
+    if edge_add:
 
-        format_path = "../results/{}_incl_additions/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
+        format_path = "../results/{}_incl_add/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
         dest_path = format_path.format(dataset, optimizer, dataset, lr, beta,
                                        n_momentum, num_epochs)
 
@@ -150,14 +151,16 @@ if __name__ == "__main__":
     parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
     parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
     parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
-    parser.add_argument('--edge_additions', type=int, default=0, help='Include edge additions?')
+    parser.add_argument('--edge_add', type=int, default=0, help='Include edge additions?')
+    parser.add_argument('--edge_del', type=int, default=0, help='Include edge deletions?')
     parser.add_argument('--verbose', type=int, default=0, help='Activate verbose output?')
 
     args = parser.parse_args()
 
-    edge_additions_bool = args.edge_additions == 1
+    edge_add_bool = args.edge_add == 1
+    edge_del_bool = args.edge_del == 1
     verbose_bool = args.verbose == 1
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed,
                  args.lr, args.optimizer, args.n_momentum, args.beta, args.num_epochs,
-                 edge_additions_bool, verbose_bool)
+                 edge_del_bool, edge_add_bool, verbose_bool)

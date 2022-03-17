@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
-from .gcn_perturb_delta import GCNSyntheticPerturbDelta
 from utils.utils import normalize_adj
 
 
@@ -17,7 +16,7 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
-                 sub_labels, y_pred_orig, num_classes, beta, edge_additions=False,
+                 sub_labels, y_pred_orig, num_classes, beta, edge_del=False, edge_add=False,
                  verbose=False):
 
         super(CFExplainer, self).__init__()
@@ -31,13 +30,17 @@ class CFExplainer:
         self.y_pred_orig = y_pred_orig
         self.beta = beta
         self.num_classes = num_classes
-        self.edge_additions = edge_additions
+        self.edge_del = edge_del
+        self.edge_add = edge_add
         self.verbose = verbose
+
+        if not edge_del and not edge_add:
+            raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
                                                 self.num_classes, self.sub_adj, dropout, beta,
-                                                edge_additions=self.edge_additions)
+                                                edge_del=self.edge_del, edge_add=self.edge_add)
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 
