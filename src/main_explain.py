@@ -70,6 +70,11 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
             get_neighbourhood(int(v), edge_index, n_layers + 1, features, labels)
         new_idx = node_dict[int(v)]
 
+        # Sanity check
+        sub_adj_diag = torch.diag(sub_adj)
+        if sub_adj_diag[sub_adj_diag != 0].any():
+            raise RuntimeError("Self-connections on graphs are not allowed")
+
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():
             sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
