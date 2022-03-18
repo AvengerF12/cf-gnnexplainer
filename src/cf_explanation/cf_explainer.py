@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
-from .gcn_perturb_bern import GCNSyntheticPerturbBern
+from .gcn_perturb_delta import GCNSyntheticPerturbDelta
 from utils.utils import normalize_adj
 
 
@@ -18,7 +18,7 @@ class CFExplainer:
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
                  sub_labels, y_pred_orig, num_classes, beta, edge_del=False, edge_add=False,
-                 bernoulli=False, verbose=False):
+                 bernoulli=False, delta=False, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -34,16 +34,23 @@ class CFExplainer:
         self.edge_del = edge_del
         self.edge_add = edge_add
         self.bernoulli = bernoulli
+        self.delta = delta
         self.verbose = verbose
 
         if not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
         # Instantiate CF model class, load weights from original model
-        self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
-                                                self.num_classes, self.sub_adj, dropout, beta,
-                                                edge_del=self.edge_del, edge_add=self.edge_add,
-                                                bernoulli=self.bernoulli)
+        if self.delta:
+            self.cf_model = GCNSyntheticPerturbDelta(self.sub_feat.shape[1], n_hid, n_hid,
+                                                     self.num_classes, self.sub_adj, dropout, beta,
+                                                     edge_del=self.edge_del, edge_add=self.edge_add,
+                                                     bernoulli=self.bernoulli)
+        else:
+            self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
+                                                    self.num_classes, self.sub_adj, dropout, beta,
+                                                    edge_del=self.edge_del, edge_add=self.edge_add,
+                                                    bernoulli=self.bernoulli)
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 

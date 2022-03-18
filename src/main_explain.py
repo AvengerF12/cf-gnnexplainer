@@ -15,7 +15,7 @@ from torch_geometric.utils import dense_to_sparse
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500,
-                 edge_del=False, edge_add=False, bernoulli=False, verbose=False):
+                 edge_del=False, edge_add=False, delta=False, bernoulli=False, verbose=False):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -97,6 +97,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 beta=beta,
                                 edge_del=edge_del,
                                 edge_add=edge_add,
+                                delta=delta,
                                 bernoulli=bernoulli,
                                 verbose=verbose)
         # If edge_add=True: learn new adj matrix directly, else: only remove existing edges
@@ -161,6 +162,8 @@ if __name__ == "__main__":
                         help='Include edge additions?')
     parser.add_argument('--edge_del', action='store_true', default=False,
                         help='Include edge deletions?')
+    parser.add_argument('--delta', action='store_true', default=False,
+                        help='Use delta formulation of the problem?')
     parser.add_argument('--bernoulli', action='store_true', default=False,
                         help='Use bernoulli-based approach to generate P?')
     parser.add_argument('--verbose', action='store_true', default=False,
@@ -170,4 +173,4 @@ if __name__ == "__main__":
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed,
                  args.lr, args.optimizer, args.n_momentum, args.beta, args.num_epochs,
-                 args.edge_del, args.edge_add, args.bernoulli, args.verbose)
+                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.verbose)
