@@ -61,7 +61,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     test_cf_examples = []
     start = time.time()
     #Note: these are the nodes for which a cf is generated
-    idx_test_sublist = idx_test[:20]
+    idx_test_sublist = idx_test[:]
     num_cf_found = 0
 
     for i, v in enumerate(idx_test_sublist):
@@ -121,24 +121,38 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     # Includes also empty examples!
     print("Number of CF examples found: {}/{}".format(num_cf_found, len(idx_test_sublist)))
 
-    # Save CF examples in test set
-    if edge_add:
+    # Build path and save CF examples in test set
+    format_path = "../results/{}"
 
-        format_path = "../results/{}_incl_add/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
-        dest_path = format_path.format(dataset, optimizer, dataset, lr, beta,
-                                       n_momentum, num_epochs)
-
-        with safe_open(dest_path, "wb") as f:
-            pickle.dump(test_cf_examples, f)
+    if not delta:
+        # In the orig formulation edge_add does both operations
+        if edge_add:
+            format_path += "_add_del_orig"
+        elif edge_del:
+            format_path += "_del_orig"
 
     else:
 
-        format_path = "../results/{}/{}/{}_cf_examples_lr{}_beta{}_mom{}_epochs{}"
-        dest_path = format_path.format(dataset, optimizer, dataset, lr, beta,
-                                       n_momentum, num_epochs)
+        if edge_add:
+            format_path += "_add"
+        if edge_del:
+            format_path += "_del"
 
-        with safe_open(dest_path, "wb") as f:
-            pickle.dump(test_cf_examples, f)
+        format_path += "_delta"
+
+    if bernoulli:
+        format_path += "_bernoulli/"
+    else:
+        format_path += "/"
+
+
+    format_path += "{}/cf_examples_lr{}_beta{}_mom{}_epochs{}"
+
+    dest_path = format_path.format(dataset, optimizer, lr, beta,
+                                   n_momentum, num_epochs)
+
+    with safe_open(dest_path, "wb") as f:
+        pickle.dump(test_cf_examples, f)
 
 
 if __name__ == "__main__":
