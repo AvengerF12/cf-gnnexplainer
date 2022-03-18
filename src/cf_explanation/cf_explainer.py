@@ -18,7 +18,7 @@ class CFExplainer:
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
                  sub_labels, y_pred_orig, num_classes, beta, edge_del=False, edge_add=False,
-                 verbose=False):
+                 bernoulli=False, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -33,6 +33,7 @@ class CFExplainer:
         self.num_classes = num_classes
         self.edge_del = edge_del
         self.edge_add = edge_add
+        self.bernoulli = bernoulli
         self.verbose = verbose
 
         if not edge_del and not edge_add:
@@ -41,7 +42,8 @@ class CFExplainer:
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
                                                 self.num_classes, self.sub_adj, dropout, beta,
-                                                edge_del=self.edge_del, edge_add=self.edge_add)
+                                                edge_del=self.edge_del, edge_add=self.edge_add,
+                                                bernoulli=self.bernoulli)
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 
@@ -121,8 +123,13 @@ class CFExplainer:
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
-        loss_total, loss_pred, loss_graph_dist, cf_adj = \
-            self.cf_model.loss(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
+        if self.bernoulli:
+            loss_total, loss_pred, loss_graph_dist, cf_adj = \
+                self.cf_model.loss_bernoulli(output[self.new_idx], self.y_pred_orig,
+                                             y_pred_new_actual)
+        else:
+            loss_total, loss_pred, loss_graph_dist, cf_adj = \
+                self.cf_model.loss_std(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
 
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)

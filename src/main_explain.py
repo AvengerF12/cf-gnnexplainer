@@ -15,7 +15,7 @@ from torch_geometric.utils import dense_to_sparse
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500,
-                 edge_del=False, edge_add=False, verbose=False):
+                 edge_del=False, edge_add=False, bernoulli=False, verbose=False):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -97,6 +97,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 beta=beta,
                                 edge_del=edge_del,
                                 edge_add=edge_add,
+                                bernoulli=bernoulli,
                                 verbose=verbose)
         # If edge_add=True: learn new adj matrix directly, else: only remove existing edges
 
@@ -156,16 +157,17 @@ if __name__ == "__main__":
     parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
     parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
     parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
-    parser.add_argument('--edge_add', type=int, default=0, help='Include edge additions?')
-    parser.add_argument('--edge_del', type=int, default=0, help='Include edge deletions?')
-    parser.add_argument('--verbose', type=int, default=0, help='Activate verbose output?')
+    parser.add_argument('--edge_add', action='store_true', default=False,
+                        help='Include edge additions?')
+    parser.add_argument('--edge_del', action='store_true', default=False,
+                        help='Include edge deletions?')
+    parser.add_argument('--bernoulli', action='store_true', default=False,
+                        help='Use bernoulli-based approach to generate P?')
+    parser.add_argument('--verbose', action='store_true', default=False,
+                        help='Activate verbose output?')
 
     args = parser.parse_args()
 
-    edge_add_bool = args.edge_add == 1
-    edge_del_bool = args.edge_del == 1
-    verbose_bool = args.verbose == 1
-
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed,
                  args.lr, args.optimizer, args.n_momentum, args.beta, args.num_epochs,
-                 edge_del_bool, edge_add_bool, verbose_bool)
+                 args.edge_del, args.edge_add, args.bernoulli, args.verbose)
