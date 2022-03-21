@@ -49,13 +49,10 @@ def visualize(df, idx_cf):
     nx.draw_networkx_labels(adj_graph, pos)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path', default=None)
-    args = parser.parse_args()
+def visualize_by_path(df_path, idx_cf):
 
     # Load CF examples
-    with open(args.path, "rb") as f:
+    with open(df_path, "rb") as f:
         cf_examples = pickle.load(f)
         num_cf_examples = len(cf_examples)
         df_prep = []
@@ -64,8 +61,17 @@ if __name__ == "__main__":
             # Ignore examples for which generating a CF wasn't possible
             if example[0] != []:
                 df_prep.append(example[0])
+
         df = pd.DataFrame(df_prep, columns=header)
 
-    idx_cf = 3
     visualize(df, idx_cf)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path', default=None)
+    args = parser.parse_args()
+
+    idx_cf = 3
+    visualize_by_path(args.path, idx_cf)
     plt.show()
