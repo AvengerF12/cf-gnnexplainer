@@ -100,7 +100,11 @@ for subdir, dirs, files in os.walk(args.res_path):
                 cf_adj = df_motif["cf_adj"][i]
                 sub_adj = df_motif["sub_adj"][i]
                 perturb = np.abs(cf_adj - sub_adj)
-                perturb_edges = np.nonzero(perturb)  # Changed edge indices
+
+                # Note: the accuracy is measured only wrt to deleted edges
+                pert_del_edges = sub_adj - cf_adj
+                pert_del_edges[pert_del_edges == -1] = 0
+                perturb_edges = np.nonzero(pert_del_edges)  # Changed edge indices
 
                 nodes_involved = np.unique(np.concatenate((perturb_edges[0], perturb_edges[1]),
                                                           axis=0))
@@ -117,7 +121,13 @@ for subdir, dirs, files in os.walk(args.res_path):
                 perturb_nodes_orig_ypred = np.array([dict_ypred_orig[k]
                                                      for k in perturb_nodes_orig_idx])
                 nodes_in_motif = perturb_nodes_orig_ypred[perturb_nodes_orig_ypred != 0]
-                prop_correct = len(nodes_in_motif) / len(perturb_nodes_orig_idx)
+
+                # Handle situation in which edges are only added and accuracy is NaN
+                if perturb_edges[0].size == 0:
+                    prop_correct = np.NaN
+
+                else:
+                    prop_correct = len(nodes_in_motif) / len(perturb_nodes_orig_idx)
 
                 accuracy.append([node_idx, new_idx, perturb_nodes_orig_idx,
                                  perturb_nodes_orig_ypred, nodes_in_motif, prop_correct])
