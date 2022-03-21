@@ -9,6 +9,7 @@ from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
 from .gcn_perturb_delta import GCNSyntheticPerturbDelta
+from .gcn_perturb_delta_CEM import GCNSyntheticPerturbCEM
 from utils.utils import normalize_adj
 
 
@@ -17,8 +18,8 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
-                 sub_labels, y_pred_orig, num_classes, beta, edge_del=False, edge_add=False,
-                 bernoulli=False, delta=False, verbose=False):
+                 sub_labels, y_pred_orig, num_classes, beta, cem_mode=None, edge_del=False,
+                 edge_add=False, bernoulli=False, delta=False, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -31,26 +32,38 @@ class CFExplainer:
         self.y_pred_orig = y_pred_orig
         self.beta = beta
         self.num_classes = num_classes
+        self.cem_mode = cem_mode
         self.edge_del = edge_del
         self.edge_add = edge_add
         self.bernoulli = bernoulli
         self.delta = delta
         self.verbose = verbose
 
-        if not edge_del and not edge_add:
+        if self.cem_mode is None and not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
         # Instantiate CF model class, load weights from original model
-        if self.delta:
-            self.cf_model = GCNSyntheticPerturbDelta(self.sub_feat.shape[1], n_hid, n_hid,
-                                                     self.num_classes, self.sub_adj, dropout, beta,
-                                                     edge_del=self.edge_del, edge_add=self.edge_add,
-                                                     bernoulli=self.bernoulli)
+        if self.cem_mode == "PN" or self.cem_mode == "PP":
+            self.cf_model = GCNSyntheticPerturbCEM(self.sub_feat.shape[1], n_hid, n_hid,
+                                                   self.num_classes, self.sub_adj, dropout, beta,
+                                                   mode=self.cem_mode)
+
+        elif self.cem_mode is None:
+
+            if self.delta:
+                self.cf_model = GCNSyntheticPerturbDelta(self.sub_feat.shape[1], n_hid, n_hid,
+                                                         self.num_classes, self.sub_adj, dropout,
+                                                         beta, edge_del=self.edge_del,
+                                                         edge_add=self.edge_add,
+                                                         bernoulli=self.bernoulli)
+            else:
+                self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
+                                                        self.num_classes, self.sub_adj, dropout,
+                                                        beta, edge_del=self.edge_del,
+                                                        edge_add=self.edge_add,
+                                                        bernoulli=self.bernoulli)
         else:
-            self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
-                                                    self.num_classes, self.sub_adj, dropout, beta,
-                                                    edge_del=self.edge_del, edge_add=self.edge_add,
-                                                    bernoulli=self.bernoulli)
+            raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 
@@ -95,8 +108,8 @@ class CFExplainer:
                 best_loss = loss_total
                 num_cf_examples += 1
 
-        # Check loss_graph_dist
-        if best_cf_example != [] and best_cf_example[-1] < 1:
+        # Check loss_graph_dist, handling edge case of PP which is not a CF
+        if best_cf_example != [] and best_cf_example[-1] < 1 and self.cem_mode != "PP":
             error_str = "cf_explainer: loss_graph_dist cannot be smaller than 1. Check symmetry"
             raise RuntimeError(error_str)
 
@@ -129,14 +142,32 @@ class CFExplainer:
         y_pred_new = torch.argmax(output[self.new_idx])
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
+
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
-        if self.bernoulli:
+        if self.cem_mode == "PN":
+
             loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                self.cf_model.loss_bernoulli(output[self.new_idx], self.y_pred_orig,
-                                             y_pred_new_actual)
+                self.cf_model.loss_PN(output[self.new_idx], self.y_pred_orig,
+                                      y_pred_new_actual)
+
+        elif self.cem_mode == "PP":
+
+            loss_total, loss_pred, loss_graph_dist, cf_adj = \
+                self.cf_model.loss_PP(output[self.new_idx], self.y_pred_orig,
+                                      y_pred_new_actual)
+
+        elif self.cem_mode is None:
+
+            if self.bernoulli:
+                loss_total, loss_pred, loss_graph_dist, cf_adj = \
+                    self.cf_model.loss_bernoulli(output[self.new_idx], self.y_pred_orig,
+                                                 y_pred_new_actual)
+            else:
+                loss_total, loss_pred, loss_graph_dist, cf_adj = \
+                    self.cf_model.loss_std(output[self.new_idx], self.y_pred_orig,
+                                           y_pred_new_actual)
         else:
-            loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                self.cf_model.loss_std(output[self.new_idx], self.y_pred_orig, y_pred_new_actual)
+            raise RuntimeError("cf_explainer/train: the specified mode for CEM is invalid")
 
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
@@ -159,7 +190,10 @@ class CFExplainer:
 
         # Note: when updating output format, also update checks
         cf_stats = []
-        if y_pred_new_actual != self.y_pred_orig:
+        cond_PP = self.cem_mode == "PP" and y_pred_new_actual == self.y_pred_orig
+        cond_cf = y_pred_new_actual != self.y_pred_orig
+
+        if cond_PP or cond_cf:
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
                         cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new_actual.item(),

@@ -14,12 +14,16 @@ from torch_geometric.utils import dense_to_sparse
 
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
-                 optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500,
+                 optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500, cem_mode=None,
                  edge_del=False, edge_add=False, delta=False, bernoulli=False, verbose=False):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.autograd.set_detect_anomaly(True)
+
+    if cem_mode is not None and (edge_del or edge_add or delta or bernoulli):
+        raise RuntimeError("The CEM implementation doesn't support the arguments: "
+                           + "edge_del, edge_add, delta or bernoulli")
 
     # Import dataset from GNN explainer paper
     with open("../data/gnn_explainer/{}.pickle".format(dataset[:4]), "rb") as f:
@@ -95,6 +99,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 y_pred_orig=y_pred_orig[v],
                                 num_classes=len(labels.unique()),
                                 beta=beta,
+                                cem_mode=cem_mode,
                                 edge_del=edge_del,
                                 edge_add=edge_add,
                                 delta=delta,
@@ -124,27 +129,29 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     # Build path and save CF examples in test set
     format_path = "../results/{}"
 
-    if not delta:
-        # In the orig formulation edge_add does both operations
-        if edge_add:
-            format_path += "_add_del_orig"
-        elif edge_del:
-            format_path += "_del_orig"
+    if cem_mode is None:
+        if not delta:
+            # In the orig formulation edge_add does both operations
+            if edge_add:
+                format_path += "_add_del_orig"
+            elif edge_del:
+                format_path += "_del_orig"
 
+        else:
+
+            if edge_add:
+                format_path += "_add"
+            if edge_del:
+                format_path += "_del"
+
+            format_path += "_delta"
+
+        if bernoulli:
+            format_path += "_bernoulli/"
+        else:
+            format_path += "/"
     else:
-
-        if edge_add:
-            format_path += "_add"
-        if edge_del:
-            format_path += "_del"
-
-        format_path += "_delta"
-
-    if bernoulli:
-        format_path += "_bernoulli/"
-    else:
-        format_path += "/"
-
+        format_path += "_" + cem_mode + "/"
 
     format_path += "{}/cf_examples_lr{}_beta{}_mom{}_epochs{}"
 
@@ -172,6 +179,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
     parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
     parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
+    parser.add_argument('--cem_mode', type=str, default=None, help='PP/PN contrastive explanation')
     parser.add_argument('--edge_add', action='store_true', default=False,
                         help='Include edge additions?')
     parser.add_argument('--edge_del', action='store_true', default=False,
@@ -185,6 +193,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed,
-                 args.lr, args.optimizer, args.n_momentum, args.beta, args.num_epochs,
+    main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
+                 args.optimizer, args.n_momentum, args.beta, args.num_epochs, args.cem_mode,
                  args.edge_del, args.edge_add, args.delta, args.bernoulli, args.verbose)

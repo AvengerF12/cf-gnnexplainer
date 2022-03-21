@@ -8,10 +8,10 @@ lr_list = [0.01, 0.1, 0.5, 1]
 epoch_list = [300, 500]
 beta_list = [0.1, 0.5]
 momentum_list = [0, 0.5, 0.9]
-edge_del_list = [True, False]
-edge_add_list = [True, False]
-bernoulli_list = [True, False]
-delta_list = [True]
+edge_del_list = [False]
+edge_add_list = [True]
+bernoulli_list = [True]
+delta_list = [False]
 
 hyperpar_combo = {"dataset": dataset_list,
                   "lr": lr_list,
@@ -25,11 +25,8 @@ hyperpar_combo = {"dataset": dataset_list,
 
 dict_keys, dict_vals = zip(*hyperpar_combo.items())
 combo_list = list(it.product(*dict_vals))
-num_combos = len(combo_list)
 
 task_list = []
-
-start_time = time.time()
 
 for i, combo in enumerate(combo_list):
 
@@ -45,7 +42,9 @@ for i, combo in enumerate(combo_list):
 
     task_list.append(delayed(main_explain)(**combo_dict))
 
-Parallel(n_jobs=-1)(task_list)
+start_time = time.time()
+print("Starting gridsearch: 0/{}".format(len(task_list)))
+Parallel(n_jobs=-1, verbose=11)(task_list)
 
 end_time = time.time()
 time_mins = (end_time-start_time)//60
