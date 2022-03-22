@@ -142,7 +142,6 @@ class CFExplainer:
         y_pred_new = torch.argmax(output[self.new_idx])
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
-
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
         if self.cem_mode == "PN":
 
@@ -191,7 +190,8 @@ class CFExplainer:
         # Note: when updating output format, also update checks
         cf_stats = []
         cond_PP = self.cem_mode == "PP" and y_pred_new_actual == self.y_pred_orig
-        cond_cf = y_pred_new_actual != self.y_pred_orig
+        # Needed to avoid including PP with different predictions
+        cond_cf = self.cem_mode != "PP" and y_pred_new_actual != self.y_pred_orig
 
         if cond_PP or cond_cf:
             cf_stats = [self.node_idx.item(), self.new_idx.item(),

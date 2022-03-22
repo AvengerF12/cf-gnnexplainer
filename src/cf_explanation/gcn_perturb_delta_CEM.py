@@ -140,11 +140,16 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
         # Note: the negative sign is gone since we want to keep the same prediction
         loss_pred = F.nll_loss(output, y_pred_orig)
-        # Number of edges changed (symmetrical)
+        # Number of edges in neighbourhood (symmetrical)
         # Note: here we are interested in finding the most sparse cf_adj with the same pred
         loss_graph_dist = sum(sum(abs(cf_adj))) / 2
+        # Note: in order to generate the best PP we need to minimize the number of entries in the
+        # cf_adj, however in order to get a better understanding the number of edges deleted is 
+        # more useful to the end user. Therefore this number is the one saved inside each cf_example
+        # generated
+        loss_graph_dist_actual = sum(sum(abs(delta))) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_diff * loss_pred + self.beta * loss_graph_dist
 
-        return loss_total, loss_pred, loss_graph_dist, cf_adj
+        return loss_total, loss_pred, loss_graph_dist_actual, cf_adj
