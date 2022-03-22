@@ -3,15 +3,16 @@ import time
 from joblib import Parallel, delayed
 from main_explain import main_explain
 
-dataset_list = ["syn5"]
+dataset_list = ["syn1"]
 lr_list = [0.01, 0.1, 0.5, 1]
 epoch_list = [300, 500]
 beta_list = [0.1, 0.5]
 momentum_list = [0, 0.5, 0.9]
-edge_del_list = [False]
-edge_add_list = [True]
+edge_del_list = [False, True]
+edge_add_list = [False, True]
 bernoulli_list = [True]
-delta_list = [False]
+delta_list = [True]
+cem_list = [None]
 
 hyperpar_combo = {"dataset": dataset_list,
                   "lr": lr_list,
@@ -21,7 +22,8 @@ hyperpar_combo = {"dataset": dataset_list,
                   "edge_del": edge_del_list,
                   "edge_add": edge_add_list,
                   "bernoulli": bernoulli_list,
-                  "delta": delta_list}
+                  "delta": delta_list,
+                  "cem_mode": cem_list}
 
 dict_keys, dict_vals = zip(*hyperpar_combo.items())
 combo_list = list(it.product(*dict_vals))
@@ -33,7 +35,7 @@ for i, combo in enumerate(combo_list):
     combo_dict = {dict_keys[i]: combo[i] for i in range(len(dict_keys))}
 
     # Need to specify at least one op
-    if not combo_dict["edge_add"] and not combo_dict["edge_del"]:
+    if not combo_dict["edge_add"] and not combo_dict["edge_del"] and combo_dict["cem_mode"] is None:
         continue
 
     # edge_add in the orig formulation is identical to edge_add + edge_del
