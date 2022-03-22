@@ -22,7 +22,7 @@ def visualize(df, idx_cf):
     added_edges[added_edges == -1] = 0
 
     print("Target node: {}, label: {}".format(df["new_idx"][idx_cf], df["label"][idx_cf]))
-    print("Graph distace loss: {}".format(df["loss_graph_dist"][idx_cf]))
+    print("Graph distance loss: {}".format(df["loss_graph_dist"][idx_cf]))
     print("Original prediction: {}, new prediciton: {}"
           .format(df["y_pred_orig"][idx_cf], df["y_pred_new_actual"][idx_cf]))
     num_nodes = df["num_nodes"][idx_cf]
@@ -72,6 +72,6 @@ if __name__ == "__main__":
     parser.add_argument('--path', default=None)
     args = parser.parse_args()
 
-    idx_cf = 3
+    idx_cf = 1
     visualize_by_path(args.path, idx_cf)
     plt.show()

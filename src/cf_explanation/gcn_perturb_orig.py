@@ -166,6 +166,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         return loss_total, loss_pred, loss_graph_dist_actual, cf_adj_actual
 
 
+    # TODO: try bi-modal regulariser
     def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual):
         P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
         P = self.BML(P_hat_symm)  # Threshold P_hat

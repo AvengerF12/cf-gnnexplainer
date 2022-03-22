@@ -173,10 +173,6 @@ class GCNSyntheticPerturbDelta(nn.Module):
         loss_graph_dist_diff = sum(sum(abs(delta_diff))) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
-        # Note: the distance loss is non-differentiable => it's not optimized directly.
-        # It only comes into play when comparing the current loss with best loss in cf_explainer
-        # The results obtained using the hyperparameters on the original paper are identical
-        # w/wo the dist loss.
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist_diff
 
         return loss_total, loss_pred, loss_graph_dist_actual, cf_adj_actual
