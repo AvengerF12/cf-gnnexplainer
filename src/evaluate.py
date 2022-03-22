@@ -71,6 +71,7 @@ def evaluate(path, dataset_dict):
     # Add num edges for each generated CF
     num_edges = []
     for i in df.index:
+        # Note: diagonal is 0
         num_edges.append(sum(sum(df["sub_adj"][i])) / 2)
 
     df["num_edges"] = num_edges
@@ -99,6 +100,10 @@ def evaluate(path, dataset_dict):
             # Note: the accuracy is measured only wrt to deleted edges
             pert_del_edges = sub_adj - cf_adj
             pert_del_edges[pert_del_edges == -1] = 0
+
+            pert_add_edges = cf_adj - sub_adj
+            pert_add_edges[pert_add_edges == -1] = 0
+
             perturb_edges = np.nonzero(pert_del_edges)  # Changed edge indices
 
             nodes_involved = np.unique(np.concatenate((perturb_edges[0], perturb_edges[1]),
@@ -119,6 +124,10 @@ def evaluate(path, dataset_dict):
 
             # Handle situation in which edges are only added and accuracy is NaN
             if perturb_edges[0].size == 0:
+                # Sanity check in case of no change to sub_adj
+                if np.nonzero(pert_add_edges)[0].size == 0 and "PP" not in path:
+                    raise RuntimeError("evaluate: sub_adj and cf_adj are identical")
+
                 prop_correct = np.NaN
 
             else:
@@ -134,7 +143,11 @@ def evaluate(path, dataset_dict):
                                                   "perturb_nodes_orig_ypred",
                                                   "nodes_in_motif", "prop_correct"])
     num_cf_examples = len(df)
-    fidelity = 1 - num_cf_examples / num_tot_examples
+
+    if "PP" in path:
+        fidelity = num_cf_examples / num_tot_examples
+    else:
+        fidelity = 1 - num_cf_examples / num_tot_examples
     avg_graph_dist = np.mean(df["loss_graph_dist"])
     avg_sparsity = np.mean(1 - df["loss_graph_dist"] / df["num_edges"])
     avg_accuracy = np.mean(df_accuracy["prop_correct"])
