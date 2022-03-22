@@ -69,9 +69,9 @@ def visualize_by_path(df_path, idx_cf):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', default=None)
+    parser.add_argument('--path', default=None, help="Path of the file containing the cf")
+    parser.add_argument('--idx_cf', default=0, help="Id of the cf to visualize")
     args = parser.parse_args()
 
-    idx_cf = 1
-    visualize_by_path(args.path, idx_cf)
+    visualize_by_path(args.path, args.idx_cf)
     plt.show()
