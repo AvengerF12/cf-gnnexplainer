@@ -19,7 +19,7 @@ class CFExplainer:
     """
     def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
                  sub_labels, y_pred_orig, num_classes, beta, cem_mode=None, edge_del=False,
-                 edge_add=False, bernoulli=False, delta=False, verbose=False):
+                 edge_add=False, bernoulli=False, delta=False, device=None, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -37,6 +37,7 @@ class CFExplainer:
         self.edge_add = edge_add
         self.bernoulli = bernoulli
         self.delta = delta
+        self.device = device
         self.verbose = verbose
 
         if self.cem_mode is None and not edge_del and not edge_add:
@@ -46,7 +47,7 @@ class CFExplainer:
         if self.cem_mode == "PN" or self.cem_mode == "PP":
             self.cf_model = GCNSyntheticPerturbCEM(self.sub_feat.shape[1], n_hid, n_hid,
                                                    self.num_classes, self.sub_adj, dropout, beta,
-                                                   mode=self.cem_mode)
+                                                   mode=self.cem_mode, device=self.device)
 
         elif self.cem_mode is None:
 
@@ -55,13 +56,13 @@ class CFExplainer:
                                                          self.num_classes, self.sub_adj, dropout,
                                                          beta, edge_del=self.edge_del,
                                                          edge_add=self.edge_add,
-                                                         bernoulli=self.bernoulli)
+                                                         bernoulli=self.bernoulli, device=self.device)
             else:
                 self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
                                                         self.num_classes, self.sub_adj, dropout,
                                                         beta, edge_del=self.edge_del,
                                                         edge_add=self.edge_add,
-                                                        bernoulli=self.bernoulli)
+                                                        bernoulli=self.bernoulli, device=self.device)
         else:
             raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
 
@@ -194,10 +195,18 @@ class CFExplainer:
         cond_cf = self.cem_mode != "PP" and y_pred_new_actual != self.y_pred_orig
 
         if cond_PP or cond_cf:
-            cf_stats = [self.node_idx.item(), self.new_idx.item(),
-                        cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
-                        self.y_pred_orig.item(), y_pred_new_actual.item(),
-                        self.sub_labels[self.new_idx].numpy(),
-                        self.sub_adj.shape[0], loss_graph_dist.item()]
+            if self.device == "cuda":
+                cf_stats = [self.node_idx.item(), self.new_idx.item(),
+                            cf_adj.detach().cpu().numpy(), self.sub_adj.detach().cpu().numpy(),
+                            self.y_pred_orig.item(), y_pred_new_actual.item(),
+                            self.sub_labels[self.new_idx].cpu().numpy(),
+                            self.sub_adj.shape[0], loss_graph_dist.item()]
+
+            else:
+                cf_stats = [self.node_idx.item(), self.new_idx.item(),
+                            cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
+                            self.y_pred_orig.item(), y_pred_new_actual.item(),
+                            self.sub_labels[self.new_idx].numpy(),
+                            self.sub_adj.shape[0], loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())

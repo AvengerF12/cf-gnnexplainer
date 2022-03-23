@@ -47,6 +47,12 @@ python visualize.py --path=/path/to/cf --idx_cf="id of cf"
 >📋  This will show the original adjacency graph, showing in black the edges that stayed the same, in green the ones that were added and in red the ones that were removed during the generation of the counterfactual.
 
 
+## CUDA support
+
+To use a CUDA device to speed-up the computation simply append the option --cuda to the main_explain.py command
+
+>📋  Among the datasets included only SYN1 shows an improvement when using CUDA, the other datasets show an increased computation time, probably due to the fact that they are much less densily connected.
+
 ## Pre-trained Models
 
 The pretrained models are available in the models folder

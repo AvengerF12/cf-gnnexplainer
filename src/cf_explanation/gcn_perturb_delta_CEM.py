@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from utils.utils import get_degree_matrix, normalize_adj, create_symm_matrix_from_vec, create_vec_from_symm_matrix, BernoulliMLSample
+from utils.utils import get_degree_matrix, normalize_adj, BernoulliMLSample, create_symm_matrix_tril
 from gcn import GraphConvolution, GCNSynthetic
 
 
@@ -18,7 +18,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, mode="PN"):
+    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, mode="PN", device=None):
 
         super(GCNSyntheticPerturbCEM, self).__init__()
         # The adj mat is stored since each instance of the explainer deals with a single node
@@ -28,14 +28,16 @@ class GCNSyntheticPerturbCEM(nn.Module):
         self.num_nodes = self.adj.shape[0]
         self.BML = BernoulliMLSample.apply
         self.mode = mode
+        self.device = device
 
-        # P_hat needs to be symmetric ==> learn vector representing entries in upper/lower
-        # triangular matrix and use to populate P_hat later
+        # The optimizer will affect only the elements below the diag of this matrix
+        # This is enforced through the function create_symm_matrix_tril(), which construct the 
+        # symmetric matrix to optimize using only the lower triangular elements of P_tril
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
-        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2)
+        self.P_tril = Parameter(torch.FloatTensor(torch.zeros(self.num_nodes, self.num_nodes)))
 
-        # P_vec is the only parameter
-        self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
+        # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
+        self.norm_eye = torch.eye(self.num_nodes, device=device)
 
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
@@ -70,7 +72,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PN(self, x):
 
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P_hat_symm = create_symm_matrix_tril(self.P_tril)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_add equivalent
@@ -78,7 +80,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         A_tilde = self.adj + delta
 
         # Note: identity matrix is added in normalize_adj()
-        norm_adj = normalize_adj(A_tilde)
+        norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
 
         output = self.__apply_model(x, norm_adj)
         act_output = F.log_softmax(output, dim=1)
@@ -88,7 +90,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PP(self, x):
 
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P_hat_symm = create_symm_matrix_tril(self.P_tril)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_del equivalent
@@ -96,7 +98,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         A_tilde = self.adj - delta
 
         # Note: identity matrix is added in normalize_adj()
-        norm_adj = normalize_adj(A_tilde)
+        norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
 
         output = self.__apply_model(x, norm_adj)
         act_output = F.log_softmax(output, dim=1)
@@ -105,7 +107,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PN(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P_hat_symm = create_symm_matrix_tril(self.P_tril)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -117,7 +119,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
         # Number of edges changed (symmetrical)
-        loss_graph_dist = sum(sum(abs(delta))) / 2
+        loss_graph_dist = torch.sum(torch.abs(delta)) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
@@ -128,7 +130,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PP(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+        P_hat_symm = create_symm_matrix_tril(self.P_tril)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # Note: flipped the boolean since we want the same prediction
@@ -142,12 +144,12 @@ class GCNSyntheticPerturbCEM(nn.Module):
         loss_pred = F.nll_loss(output, y_pred_orig)
         # Number of edges in neighbourhood (symmetrical)
         # Note: here we are interested in finding the most sparse cf_adj with the same pred
-        loss_graph_dist = sum(sum(abs(cf_adj))) / 2
+        loss_graph_dist = torch.sum(torch.abs(cf_adj)) / 2
         # Note: in order to generate the best PP we need to minimize the number of entries in the
         # cf_adj, however in order to get a better understanding the number of edges deleted is 
         # more useful to the end user. Therefore this number is the one saved inside each cf_example
         # generated
-        loss_graph_dist_actual = sum(sum(abs(delta))) / 2
+        loss_graph_dist_actual = torch.sum(torch.abs(delta)) / 2
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_diff * loss_pred + self.beta * loss_graph_dist

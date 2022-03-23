@@ -15,11 +15,20 @@ from torch_geometric.utils import dense_to_sparse
 
 def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500, cem_mode=None,
-                 edge_del=False, edge_add=False, delta=False, bernoulli=False, verbose=False):
+                 edge_del=False, edge_add=False, delta=False, bernoulli=False, cuda=False,
+                 verbose=False):
+
+    cuda = cuda and torch.cuda.is_available()
 
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.autograd.set_detect_anomaly(True)
+
+    device = None
+
+    if cuda:
+        device = "cuda"
+        torch.cuda.manual_seed(seed)
 
     if cem_mode is not None and (edge_del or edge_add or delta or bernoulli):
         raise RuntimeError("The CEM implementation doesn't support the arguments: "
@@ -34,27 +43,37 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     labels = torch.tensor(data["labels"]).squeeze()
     idx_train = torch.tensor(data["train_idx"])
     idx_test = torch.tensor(data["test_idx"])
+
+    if cuda:
+        adj = adj.cuda()
+        features = features.cuda()
+        labels = labels.cuda()
+        idx_train = idx_train.cuda()
+        idx_test = idx_test.cuda()
+
     # Needed for pytorch-geo functions, returns a sparse representation:
     # Edge indices: row/columns of cells containing non-zero entries
     # Edge attributes: tensor containing edge's features
     edge_index = dense_to_sparse(adj)
 
-    # Change to binary task: 0 if not in house, 1 if in house
-    if dataset == "syn1_binary":
-        labels[labels == 2] = 1
-        labels[labels == 3] = 1
-
     # According to reparam trick from GCN paper
-    norm_adj = normalize_adj(adj)
+    norm_adj = normalize_adj(adj, device=device)
 
     # Set up original model, get predictions
     model = GCNSynthetic(nfeat=features.shape[1], nhid=hid_units, nout=hid_units,
                          nclass=len(labels.unique()), dropout=dropout_r)
-
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset)))
     model.eval()
+
+    if cuda:
+        model = model.cuda()
+
     output = model(features, norm_adj)
     y_pred_orig = torch.argmax(output, dim=1)
+
+    if cuda:
+        output = output.cuda()
+        y_pred_orig = y_pred_orig.cuda()
 
     if verbose:
         print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
@@ -65,7 +84,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
     test_cf_examples = []
     start = time.time()
     #Note: these are the nodes for which a cf is generated
-    idx_test_sublist = idx_test[:]
+    idx_test_sublist = idx_test[:20]
     num_cf_found = 0
 
     for i, v in enumerate(idx_test_sublist):
@@ -81,12 +100,12 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():
-            sub_adj_pred = model(sub_feat, normalize_adj(sub_adj))[new_idx]
+            norm_adj = normalize_adj(sub_adj, device=device)
+            sub_adj_pred = model(sub_feat, norm_adj)[new_idx]
 
         if verbose:
             print("Output original model, full adj: {}".format(output[v]))
             print("Output original model, sub adj: {}".format(sub_adj_pred))
-
 
         # Need to instantitate new cf_model for each instance because size of P
         # changes based on size of sub_adj
@@ -104,8 +123,11 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 edge_add=edge_add,
                                 delta=delta,
                                 bernoulli=bernoulli,
+                                device=device,
                                 verbose=verbose)
-        # If edge_add=True: learn new adj matrix directly, else: only remove existing edges
+
+        if cuda:
+            explainer.cf_model.cuda()
 
         cf_example = explainer.explain(node_idx=v, cf_optimizer=optimizer, new_idx=new_idx,
                                        lr=lr, n_momentum=n_momentum,
@@ -188,6 +210,8 @@ if __name__ == "__main__":
                         help='Use delta formulation of the problem?')
     parser.add_argument('--bernoulli', action='store_true', default=False,
                         help='Use bernoulli-based approach to generate P?')
+    parser.add_argument('--cuda', action='store_true', default=False,
+                        help='Activate CUDA support?')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help='Activate verbose output?')
 
@@ -195,4 +219,4 @@ if __name__ == "__main__":
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.beta, args.num_epochs, args.cem_mode,
-                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.verbose)
+                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.cuda, args.verbose)
