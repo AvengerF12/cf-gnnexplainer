@@ -1,4 +1,5 @@
 import networkx as nx
+from networkx.drawing.nx_agraph import graphviz_layout
 from torch_geometric.utils import dense_to_sparse
 import matplotlib.pyplot as plt
 import argparse
@@ -10,7 +11,7 @@ import torch
 header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "y_pred_orig", "y_pred_new_actual",
           "label", "num_nodes", "loss_graph_dist"]
 
-def visualize(df, idx_cf):
+def visualize(df, idx_cf, figsize=(20,15)):
 
     sub_adj = torch.Tensor(df["sub_adj"][idx_cf])
     cf_adj = torch.Tensor(df["cf_adj"][idx_cf])
@@ -36,8 +37,10 @@ def visualize(df, idx_cf):
     adj_graph.add_nodes_from(range(num_nodes))
     adj_graph.add_edges_from(sparse_sub_adj)
 
+    plt.figure(figsize=figsize)
+
     # Keep same pos
-    pos = nx.spring_layout(adj_graph)
+    pos = graphviz_layout(adj_graph, root=df["new_idx"][idx_cf])
 
     # sub_adj visualization with removed edges
     nx.draw_networkx_edges(adj_graph, pos, sparse_sub_adj, edge_color="black")
