@@ -76,7 +76,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_add equivalent
-        delta = (1 - self.adj.int()) * P
+        delta = (1 - self.adj) * P
         A_tilde = self.adj + delta
 
         # Note: identity matrix is added in normalize_adj()
@@ -113,7 +113,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         # edge_add equivalent
-        delta = (1 - self.adj.int()) * P
+        delta = (1 - self.adj) * P
         cf_adj = self.adj + delta
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
@@ -137,7 +137,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         pred_diff = (y_pred_new_actual != y_pred_orig).float()
 
         # edge_del equivalent
-        delta = self.adj.int() * P
+        delta = self.adj * P
         cf_adj = self.adj - delta
 
         # Note: the negative sign is gone since we want to keep the same prediction
