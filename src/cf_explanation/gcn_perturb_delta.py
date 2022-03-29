@@ -84,14 +84,13 @@ class GCNSyntheticPerturbDelta(nn.Module):
         delta_diff = 0
         delta_pred = 0
 
-        # TODO: check for numerical errors
         if self.edge_add:
-            delta_diff += (1 - self.adj.int()) * P_hat_symm
-            delta_pred += (1 - self.adj.int()) * P
+            delta_diff += (1 - self.adj) * P_hat_symm
+            delta_pred += (1 - self.adj) * P
 
         if self.edge_del:
-            delta_diff -= P_hat_symm * self.adj.int()
-            delta_pred -= P * self.adj.int()
+            delta_diff -= P_hat_symm * self.adj
+            delta_pred -= P * self.adj
 
         A_tilde_diff = self.adj + delta_diff
         A_tilde_pred = self.adj + delta_pred
@@ -113,10 +112,10 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
         # Note: identity matrix is added in normalize_adj()
         if self.edge_add:
-            delta += (1 - self.adj.int()) * P
+            delta += (1 - self.adj) * P
 
         if self.edge_del:
-            delta -= P * self.adj.int()
+            delta -= P * self.adj
 
         A_tilde = self.adj + delta
 
@@ -140,12 +139,12 @@ class GCNSyntheticPerturbDelta(nn.Module):
         delta_actual = 0
 
         if self.edge_add:
-            mat_constr = 1 - self.adj.int()
+            mat_constr = 1 - self.adj
             delta_diff += mat_constr * P_hat_symm
             delta_actual += mat_constr * P
 
         if self.edge_del:
-            delta_diff -= P_hat_symm * self.adj.int()
+            delta_diff -= P_hat_symm * self.adj
             delta_actual -= P * self.adj
 
         cf_adj_actual = self.adj + delta_actual
@@ -173,10 +172,10 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
         # Note: the differentiable and actual formulations are identical
         if self.edge_add:
-            delta += (1 - self.adj.int()) * P
+            delta += (1 - self.adj) * P
 
         if self.edge_del:
-            delta -= P * self.adj.int()
+            delta -= P * self.adj
 
         cf_adj = self.adj + delta
 
