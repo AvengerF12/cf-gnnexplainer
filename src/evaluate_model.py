@@ -12,11 +12,7 @@ from utils.utils import normalize_adj
 hidden = 20
 dropout = 0.0
 
-def compute_accuracy(output, labels):
-    correct = output.eq(labels).double()
-    correct = correct.sum()
-    return correct / len(labels)
-
+# Note: the trained model performance may differ due to random init of the weights
 def evaluate_model(dataset, dataset_id):
 
     # Note: no self-connections in syn*

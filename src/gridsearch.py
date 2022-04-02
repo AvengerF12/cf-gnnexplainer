@@ -13,6 +13,7 @@ edge_add_list = [False, True]
 bernoulli_list = [True]
 delta_list = [True]
 cem_list = [None]
+cuda_list = [True]
 
 hyperpar_combo = {"dataset": dataset_list,
                   "lr": lr_list,
@@ -23,7 +24,8 @@ hyperpar_combo = {"dataset": dataset_list,
                   "edge_add": edge_add_list,
                   "bernoulli": bernoulli_list,
                   "delta": delta_list,
-                  "cem_mode": cem_list}
+                  "cem_mode": cem_list,
+                  "cuda": cuda_list}
 
 dict_keys, dict_vals = zip(*hyperpar_combo.items())
 combo_list = list(it.product(*dict_vals))
@@ -46,7 +48,7 @@ for i, combo in enumerate(combo_list):
 
 start_time = time.time()
 print("Starting gridsearch: 0/{}".format(len(task_list)))
-Parallel(n_jobs=-1, verbose=11)(task_list)
+Parallel(n_jobs=2, verbose=11)(task_list)
 
 end_time = time.time()
 time_mins = (end_time-start_time)//60

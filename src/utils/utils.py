@@ -6,7 +6,7 @@ import pandas as pd
 from torch_geometric.utils import k_hop_subgraph, dense_to_sparse, to_dense_adj, subgraph
 
 
-# Used to implement Bernoulli rv approach to P generation in Srinivas paper (TODO)
+# Used to implement Bernoulli rv approach to P generation in Srinivas paper
 class BernoulliMLSample(torch.autograd.Function):
 
     @staticmethod
