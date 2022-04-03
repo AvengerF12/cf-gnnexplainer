@@ -30,8 +30,8 @@ class GraphConvolution(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def forward(self, input, adj):
-        support = torch.mm(input, self.weight)
+    def forward(self, x, adj):
+        support = torch.mm(x, self.weight)
         output = torch.spmm(adj, support)
         if self.bias is not None:
             return output + self.bias
@@ -48,13 +48,22 @@ class GCNSynthetic(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks, including
     """
-    def __init__(self, nfeat, nhid, nout, nclass, dropout):
+    def __init__(self, nfeat, nhid, nout, nclass, dropout, graph_class=False, num_nodes=None):
         super(GCNSynthetic, self).__init__()
+
+        self.graph_class = graph_class
 
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid + nhid + nout, nclass)
+
+        if self.graph_class:
+            self.dim_lin = (nhid + nhid + nout) * num_nodes
+            self.lin = nn.Linear(self.dim_lin, nclass)
+        else:
+            self.dim_lin = nhid + nhid + nout
+            self.lin = nn.Linear(self.dim_lin, nclass)
+
         self.dropout = dropout
 
     def forward(self, x, adj):
@@ -63,8 +72,20 @@ class GCNSynthetic(nn.Module):
         x2 = F.relu(self.gc2(x1, adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1)
+
+        if self.graph_class:
+            lin_in = torch.flatten(torch.cat((x1, x2, x3), dim=1))
+        else:
+            lin_in = torch.cat((x1, x2, x3), dim=1)
+
+        x = self.lin(lin_in)
+
+        if self.graph_class:
+            softmax = F.log_softmax(x, dim=0)
+        else:
+            softmax = F.log_softmax(x, dim=1)
+
+        return softmax
 
     def loss(self, pred, label):
         return F.nll_loss(pred, label)
