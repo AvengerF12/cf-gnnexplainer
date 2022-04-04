@@ -11,9 +11,10 @@ from gcn import GCNSynthetic
 from cf_explanation.cf_explainer import CFExplainer
 from utils.utils import normalize_adj, get_neighbourhood, safe_open
 from torch_geometric.utils import dense_to_sparse
+from datasets import SyntheticDataset, MUTAGDataset
 
 
-def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
+def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500, cem_mode=None,
                  edge_del=False, edge_add=False, delta=False, bernoulli=False, cuda=False,
                  verbose=False):
@@ -35,88 +36,74 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                            + "edge_del, edge_add, delta or bernoulli")
 
     # Import dataset from GNN explainer paper
-    with open("../data/gnn_explainer/{}.pickle".format(dataset[:4]), "rb") as f:
-        data = pickle.load(f)
-
-    adj = torch.Tensor(data["adj"]).squeeze()       # Does not include self loops
-    features = torch.Tensor(data["feat"]).squeeze()
-    labels = torch.tensor(data["labels"]).squeeze()
-    idx_train = torch.tensor(data["train_idx"])
-    idx_test = torch.tensor(data["test_idx"])
-
-    if cuda:
-        adj = adj.cuda()
-        features = features.cuda()
-        labels = labels.cuda()
-        idx_train = idx_train.cuda()
-        idx_test = idx_test.cuda()
-
-    # Needed for pytorch-geo functions, returns a sparse representation:
-    # Edge indices: row/columns of cells containing non-zero entries
-    # Edge attributes: tensor containing edge's features
-    edge_index = dense_to_sparse(adj)
-
-    # According to reparam trick from GCN paper
-    norm_adj = normalize_adj(adj, device=device)
-
-    # Set up original model, get predictions
-    model = GCNSynthetic(nfeat=features.shape[1], nhid=hid_units, nout=hid_units,
-                         nclass=len(labels.unique()), dropout=dropout_r)
-    model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset)))
-    model.eval()
-
-    if cuda:
-        model = model.cuda()
-
-    output = model(features, norm_adj)
-    y_pred_orig = torch.argmax(output, dim=1)
-
-    if cuda:
-        output = output.cuda()
-        y_pred_orig = y_pred_orig.cuda()
-
-    if verbose:
-        print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
-        # Confirm model is actually doing something
-        print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.numpy(), return_counts=True)))
+    if dataset_id == "MUTAG":
+        dataset = MUTAGDataset("../data/MUTAG")
+    elif dataset_id in ["syn1", "syn4", "syn5"]:
+        dataset = SyntheticDataset(dataset_id[:4], n_layers)
+    else:
+        raise RuntimeError("Unsupported dataset")
 
     # Get CF examples in test set
     test_cf_examples = []
     start = time.time()
-    #Note: these are the nodes for which a cf is generated
-    idx_test_sublist = idx_test[:]
+    #Note: these are the nodes for which a cf is generated (full list is range(len(dataset)))
+    idx_samples = range(len(dataset))
     num_cf_found = 0
 
-    for i, v in enumerate(idx_test_sublist):
+    for i in idx_samples:
 
-        sub_adj, sub_feat, sub_labels, node_dict = \
-            get_neighbourhood(int(v), edge_index, n_layers + 1, features, labels)
-        new_idx = node_dict[int(v)]
+        if dataset.task == "node-class":
+            sub_adj, sub_feat, sub_labels, orig_idx, new_idx = dataset[i]
+
+            # Set up original model
+            model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
+                                 nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task)
+        elif dataset.task == "graph-class":
+            sub_adj, sub_feat, sub_labels = dataset[i]
+
+            # Set up original model
+            model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
+                                 nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task,
+                                 num_nodes=dataset.max_num_nodes)
+        else:
+            raise RuntimeError("Task not supported")
+
+        # Load saved model parameters
+        model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
+        model.eval()
+
+        if cuda:
+            model = model.cuda()
+
+        # According to reparam trick from GCN paper
+        norm_adj = normalize_adj(sub_adj, device=device)
+        output = model(sub_feat, norm_adj)
+
+        if dataset.task == "node-class":
+            y_pred_orig = torch.argmax(output, dim=1)
+        elif dataset.task == "graph-class":
+            y_pred_orig = torch.argmax(output, dim=0)
+
+        if cuda:
+            output = output.cuda()
+            y_pred_orig = y_pred_orig.cuda()
 
         # Sanity check
         sub_adj_diag = torch.diag(sub_adj)
         if sub_adj_diag[sub_adj_diag != 0].any():
             raise RuntimeError("Self-connections on graphs are not allowed")
 
-        # Check that original model gives same prediction on full graph and subgraph
-        with torch.no_grad():
-            norm_adj = normalize_adj(sub_adj, device=device)
-            sub_adj_pred = model(sub_feat, norm_adj)[new_idx]
-
-        if verbose:
-            print("Output original model, full adj: {}".format(output[v]))
-            print("Output original model, sub adj: {}".format(sub_adj_pred))
 
         # Need to instantitate new cf_model for each instance because size of P
         # changes based on size of sub_adj
+        # TODO: sub_labels is just 1 label for graph class
         explainer = CFExplainer(model=model,
                                 sub_adj=sub_adj,
                                 sub_feat=sub_feat,
                                 n_hid=hid_units,
                                 dropout=dropout_r,
                                 sub_labels=sub_labels,
-                                y_pred_orig=y_pred_orig[v],
-                                num_classes=len(labels.unique()),
+                                num_classes=dataset.n_classes,
                                 beta=beta,
                                 cem_mode=cem_mode,
                                 edge_del=edge_del,
@@ -124,14 +111,22 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
                                 delta=delta,
                                 bernoulli=bernoulli,
                                 device=device,
+                                task=dataset.task,
                                 verbose=verbose)
 
         if cuda:
             explainer.cf_model.cuda()
 
-        cf_example = explainer.explain(node_idx=v, cf_optimizer=optimizer, new_idx=new_idx,
-                                       lr=lr, n_momentum=n_momentum,
-                                       num_epochs=num_epochs)
+        if dataset.task == "node-class":
+
+            cf_example = explainer.explain_node(task=dataset.task, cf_optimizer=optimizer,
+                                                node_idx=orig_idx, new_idx=new_idx,
+                                                y_pred_orig=y_pred_orig[new_idx], lr=lr,
+                                                n_momentum=n_momentum, num_epochs=num_epochs)
+        elif dataset.task == "graph-class":
+            cf_example = explainer.explain_graph(task=dataset.task, cf_optimizer=optimizer,
+                                                 y_pred_orig=y_pred_orig, lr=lr,
+                                                 n_momentum=n_momentum, num_epochs=num_epochs)
 
         test_cf_examples.append(cf_example)
 
@@ -141,12 +136,12 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
         if verbose:
             time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
-            print(time_frmt_str.format(num_epochs, i+1, len(idx_test_sublist),
+            print(time_frmt_str.format(num_epochs, i+1, len(idx_samples),
                                        (time.time() - start)/60))
 
     print("Total time elapsed: {:.4f} mins".format((time.time() - start)/60))
     # Includes also empty examples!
-    print("Number of CF examples found: {}/{}".format(num_cf_found, len(idx_test_sublist)))
+    print("Number of CF examples found: {}/{}".format(num_cf_found, len(idx_samples)))
 
     # Build path and save CF examples in test set
     format_path = "../results/{}"
@@ -177,7 +172,7 @@ def main_explain(dataset, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.0
 
     format_path += "{}/cf_examples_lr{}_beta{}_mom{}_epochs{}"
 
-    dest_path = format_path.format(dataset, optimizer, lr, beta,
+    dest_path = format_path.format(dataset_id, optimizer, lr, beta,
                                    n_momentum, num_epochs)
 
     with safe_open(dest_path, "wb") as f:
