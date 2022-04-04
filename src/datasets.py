@@ -11,10 +11,11 @@ from torch.utils.data import Dataset
 from utils.utils import get_neighbourhood
 from torch_geometric.utils import dense_to_sparse, to_dense_adj
 
+
 # Works for all syn* datasets
 class SyntheticDataset(Dataset):
 
-    def __init__(self, dataset_id, n_layers):
+    def __init__(self, dataset_id, n_layers=3):
 
         self.n_layers = n_layers
 
@@ -51,6 +52,7 @@ class SyntheticDataset(Dataset):
 
         return sub_adj, sub_feat, sub_labels, orig_idx, new_idx
 
+    # Fixed split
     def split_tr_ts_idx(self, train_ratio=None):
         return self.train_idx, self.test_idx
 
@@ -137,3 +139,9 @@ class MUTAGDataset(Dataset):
         test_idx = idx[num_train:]
 
         return train_idx, test_idx
+
+
+avail_datasets = {"syn1": SyntheticDataset,
+                  "syn4": SyntheticDataset,
+                  "syn5": SyntheticDataset,
+                  "MUTAG": MUTAGDataset}
