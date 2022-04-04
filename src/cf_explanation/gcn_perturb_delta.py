@@ -12,13 +12,17 @@ class GCNSyntheticPerturbDelta(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_del=False,
+    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, task, edge_del=False,
                  edge_add=False, bernoulli=False, device=None):
         super(GCNSyntheticPerturbDelta, self).__init__()
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
+
+        self.task = task
+
+        # Used to compute flattened layer dimension when using graph classification
         self.num_nodes = self.adj.shape[0]
         self.bernoulli = bernoulli
         self.device = device
@@ -31,8 +35,12 @@ class GCNSyntheticPerturbDelta(nn.Module):
         if not edge_del and not edge_add:
             raise RuntimeError("GCNSyntheticPerturbDelta: need to specify allowed add/del op")
 
+        allowed_tasks = ["node-class", "graph-class"]
+        if self.task not in allowed_tasks:
+            raise RuntimeError("GCNSynthetic: invalid task specified")
+
         # The optimizer will affect only the elements below the diag of this matrix
-        # This is enforced through the function create_symm_matrix_tril(), which construct the 
+        # This is enforced through the function create_symm_matrix_tril(), which constructs the 
         # symmetric matrix to optimize using only the lower triangular elements of P_tril
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         self.P_tril = Parameter(torch.FloatTensor(torch.zeros(self.num_nodes, self.num_nodes)))
@@ -43,7 +51,14 @@ class GCNSyntheticPerturbDelta(nn.Module):
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid + nhid + nout, nclass)
+
+        if self.task == "graph-class":
+            self.dim_lin = (nhid + nhid + nout) * self.num_nodes
+            self.lin = nn.Linear(self.dim_lin, nclass)
+        elif self.task == "node-class":
+            self.dim_lin = nhid + nhid + nout
+            self.lin = nn.Linear(self.dim_lin, nclass)
+
         self.dropout = dropout
 
 
@@ -54,9 +69,20 @@ class GCNSyntheticPerturbDelta(nn.Module):
         x2 = F.relu(self.gc2(x1, norm_adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
 
-        return x
+        if self.task == "graph-class":
+            lin_in = torch.flatten(torch.cat((x1, x2, x3), dim=1))
+        elif self.task == "node-class":
+            lin_in = torch.cat((x1, x2, x3), dim=1)
+
+        x = self.lin(lin_in)
+
+        if self.task == "graph-class":
+            softmax_out = F.log_softmax(x, dim=0)
+        elif self.task == "node-class":
+            softmax_out = F.log_softmax(x, dim=1)
+
+        return softmax_out
 
 
     def forward(self, x):
@@ -101,7 +127,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
         output_diff = self.__apply_model(x, norm_adj_diff)
         output_pred = self.__apply_model(x, norm_adj_pred)
 
-        return F.log_softmax(output_diff, dim=1), F.log_softmax(output_pred, dim=1)
+        return output_diff, output_pred
 
 
     def __forward_bernoulli(self, x):
@@ -122,9 +148,8 @@ class GCNSyntheticPerturbDelta(nn.Module):
         norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
 
         output = self.__apply_model(x, norm_adj)
-        act_output = F.log_softmax(output, dim=1)
 
-        return act_output, act_output
+        return output, output
 
 
     def loss_std(self, output, y_pred_orig, y_pred_new_actual):
