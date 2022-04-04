@@ -47,7 +47,8 @@ class CFExplainer:
         if self.cem_mode == "PN" or self.cem_mode == "PP":
             self.cf_model = GCNSyntheticPerturbCEM(self.sub_feat.shape[1], n_hid, n_hid,
                                                    self.num_classes, self.sub_adj, dropout, beta,
-                                                   mode=self.cem_mode, device=self.device)
+                                                   mode=self.cem_mode, device=self.device,
+                                                   task=self.task)
 
         elif self.cem_mode is None:
 
@@ -63,7 +64,8 @@ class CFExplainer:
                                                         self.num_classes, self.sub_adj, dropout,
                                                         beta, edge_del=self.edge_del,
                                                         edge_add=self.edge_add,
-                                                        bernoulli=self.bernoulli, device=self.device)
+                                                        bernoulli=self.bernoulli, task=self.task,
+                                                        device=self.device)
         else:
             raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
 
