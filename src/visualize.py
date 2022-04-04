@@ -39,8 +39,12 @@ def visualize(df, idx_cf, figsize=(20,15)):
 
     plt.figure(figsize=figsize)
 
-    # Keep same pos
-    pos = graphviz_layout(adj_graph, root=df["new_idx"][idx_cf])
+    # Keep same pos for consistent plotting
+    # In case of graph classification the idx of single nodes are not provided
+    if df["new_idx"][idx_cf] is not None:
+        pos = graphviz_layout(adj_graph, root=df["new_idx"][idx_cf])
+    else:
+        pos = graphviz_layout(adj_graph)
 
     # sub_adj visualization with removed edges
     nx.draw_networkx_edges(adj_graph, pos, sparse_sub_adj, edge_color="black")
@@ -48,7 +52,10 @@ def visualize(df, idx_cf, figsize=(20,15)):
     nx.draw_networkx_edges(adj_graph, pos, sparse_added_edges, edge_color="green")
 
     nx.draw_networkx_nodes(adj_graph, pos, range(num_nodes))
-    nx.draw_networkx_nodes(adj_graph, pos, [df["new_idx"][idx_cf]], node_color="yellow")
+
+    if df["new_idx"][idx_cf] is not None:
+        nx.draw_networkx_nodes(adj_graph, pos, [df["new_idx"][idx_cf]], node_color="yellow")
+
     nx.draw_networkx_labels(adj_graph, pos)
 
 
@@ -72,8 +79,8 @@ def visualize_by_path(df_path, idx_cf):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path', default=None, help="Path of the file containing the cf")
-    parser.add_argument('--idx_cf', default=0, help="Id of the cf to visualize")
+    parser.add_argument('--path', type=str, default=None, help="Path of the file containing the cf")
+    parser.add_argument('--idx_cf', type=int, default=0, help="Id of the cf to visualize")
     args = parser.parse_args()
 
     visualize_by_path(args.path, args.idx_cf)
