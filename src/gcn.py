@@ -48,19 +48,24 @@ class GCNSynthetic(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks, including
     """
-    def __init__(self, nfeat, nhid, nout, nclass, dropout, graph_class=False, num_nodes=None):
+    def __init__(self, nfeat, nhid, nout, nclass, dropout, task, num_nodes=None):
         super(GCNSynthetic, self).__init__()
 
-        self.graph_class = graph_class
+        allowed_tasks = ["node-class", "graph-class"]
+
+        if task not in allowed_tasks:
+            raise RuntimeError("GCNSynthetic: invalid task specified")
+
+        self.task = task
 
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
 
-        if self.graph_class:
+        if self.task == "graph-class":
             self.dim_lin = (nhid + nhid + nout) * num_nodes
             self.lin = nn.Linear(self.dim_lin, nclass)
-        else:
+        elif self.task == "node-class":
             self.dim_lin = nhid + nhid + nout
             self.lin = nn.Linear(self.dim_lin, nclass)
 
@@ -73,19 +78,19 @@ class GCNSynthetic(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
 
-        if self.graph_class:
+        if self.task == "graph-class":
             lin_in = torch.flatten(torch.cat((x1, x2, x3), dim=1))
-        else:
+        elif self.task == "node-class":
             lin_in = torch.cat((x1, x2, x3), dim=1)
 
         x = self.lin(lin_in)
 
-        if self.graph_class:
-            softmax = F.log_softmax(x, dim=0)
-        else:
-            softmax = F.log_softmax(x, dim=1)
+        if self.task == "graph-class":
+            softmax_out = F.log_softmax(x, dim=0)
+        elif self.task == "node-class":
+            softmax_out = F.log_softmax(x, dim=1)
 
-        return softmax
+        return softmax_out
 
     def loss(self, pred, label):
         return F.nll_loss(pred, label)

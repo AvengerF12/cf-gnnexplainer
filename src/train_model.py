@@ -181,6 +181,6 @@ if __name__ == "__main__":
     elif args.dataset == "MUTAG":
         dataset = MUTAGDataset(args.dataset)
         model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
-                             args.dropout, True, dataset.max_num_nodes)
+                             args.dropout, dataset.task, dataset.max_num_nodes)
 
         train_graph_classifier(dataset, model, args)
