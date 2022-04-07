@@ -18,16 +18,21 @@ class GCNSyntheticPerturbCEM(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, task, mode="PN", device=None):
+    def __init__(self, nfeat, nhid, nout, nclass, adj, num_nodes, dropout, beta, task,
+                 mode="PN", device=None):
 
         super(GCNSyntheticPerturbCEM, self).__init__()
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
-        self.num_nodes = self.adj.shape[0]
         self.BML = BernoulliMLSample.apply
         self.task = task
+
+        # Used to find the appropriate part of P to perturbate (w/o padding) and compute flattened
+        # layer for graph classification (differs from num_nodes_adj only when task = graph-class)
+        self.num_nodes_actual = num_nodes
+
         self.mode = mode
         self.device = device
 
@@ -35,21 +40,23 @@ class GCNSyntheticPerturbCEM(nn.Module):
         if self.task not in allowed_tasks:
             raise RuntimeError("GCNSynthetic: invalid task specified")
 
+        # Number of nodes in the adj, in case of graph-class includes padding
+        self.num_nodes_adj = self.adj.shape[0]
+
         # The optimizer will affect only the elements below the diag of this matrix
-        # This is enforced through the function create_symm_matrix_tril(), which construct the 
-        # symmetric matrix to optimize using only the lower triangular elements of P_tril
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
-        self.P_tril = Parameter(torch.FloatTensor(torch.zeros(self.num_nodes, self.num_nodes)))
+        self.P_tril = Parameter(torch.FloatTensor(torch.zeros(self.num_nodes_actual,
+                                                              self.num_nodes_actual)))
 
         # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
-        self.norm_eye = torch.eye(self.num_nodes, device=device)
+        self.norm_eye = torch.eye(self.num_nodes_adj, device=device)
 
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
 
         if self.task == "graph-class":
-            self.dim_lin = (nhid + nhid + nout) * self.num_nodes
+            self.dim_lin = (nhid + nhid + nout) * self.num_nodes_adj
             self.lin = nn.Linear(self.dim_lin, nclass)
         elif self.task == "node-class":
             self.dim_lin = nhid + nhid + nout
@@ -96,7 +103,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PN(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_add equivalent
@@ -113,7 +120,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PP(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_del equivalent
@@ -129,7 +136,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PN(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -152,7 +159,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PP(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # Note: flipped the boolean since we want the same prediction
