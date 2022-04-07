@@ -48,6 +48,8 @@ class GCNSynthetic(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks, including
     """
+    # num_nodes is used to determine the size of the flattened layer
+    # It assumes that the max number of nodes in the graph adj matrices is num_nodes
     def __init__(self, nfeat, nhid, nout, nclass, dropout, task, num_nodes=None):
         super(GCNSynthetic, self).__init__()
 

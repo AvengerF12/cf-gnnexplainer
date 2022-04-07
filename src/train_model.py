@@ -174,7 +174,7 @@ if __name__ == "__main__":
     if args.dataset in ["syn1", "syn4", "syn5"]:
         dataset = SyntheticDataset(args.dataset, args.n_layers)
         model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
-                             args.dropout)
+                             args.dropout, dataset.task)
 
         train_node_classifier(dataset, model, args)
 

@@ -3,19 +3,19 @@ import time
 from joblib import Parallel, delayed
 from main_explain import main_explain
 
-dataset_list = ["syn1"]
+dataset_list = ["MUTAG"]
 lr_list = [0.01, 0.1, 0.5, 1]
 epoch_list = [300, 500]
-beta_list = [0.1, 0.5]
+beta_list = [0, 0.1, 0.5]
 momentum_list = [0, 0.5, 0.9]
 edge_del_list = [False, True]
 edge_add_list = [False, True]
 bernoulli_list = [True]
 delta_list = [True]
 cem_list = [None]
-cuda_list = [True]
+cuda_list = [False]
 
-hyperpar_combo = {"dataset": dataset_list,
+hyperpar_combo = {"dataset_id": dataset_list,
                   "lr": lr_list,
                   "num_epochs": epoch_list,
                   "beta": beta_list,
@@ -48,7 +48,7 @@ for i, combo in enumerate(combo_list):
 
 start_time = time.time()
 print("Starting gridsearch: 0/{}".format(len(task_list)))
-Parallel(n_jobs=2, verbose=11)(task_list)
+Parallel(n_jobs=-1, verbose=11)(task_list)
 
 end_time = time.time()
 time_mins = (end_time-start_time)//60
