@@ -127,31 +127,6 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
     return df_accuracy
 
 
-def compute_edit_distance(expl_df):
-
-    edit_dist_list = []
-
-    for idx, row in expl_df.iterrows():
-
-        orig_adj = row["sub_adj"]
-        expl_adj = row["cf_adj"]
-
-        # Compute edges affected by del and add operations respectively
-        pert_del_edges = orig_adj - expl_adj
-        pert_del_edges[pert_del_edges == -1] = 0
-
-        pert_add_edges = expl_adj - orig_adj
-        pert_add_edges[pert_add_edges == -1] = 0
-
-        del_edits = np.sum(pert_del_edges) / 2
-        add_edits = np.sum(pert_add_edges) / 2
-
-        edit_dist = add_edits - del_edits
-        edit_dist_list.append(edit_dist)
-
-    return np.average(edit_dist_list)
-
-
 def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accuracy_bool=True):
 
     # Explanation count
@@ -174,7 +149,6 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
 
     # Add num edges for each generated explanation
     expl_df["num_edges"] = expl_df["sub_adj"].transform(lambda x: np.sum(x)/2)
-    avg_edit_dist = compute_edit_distance(expl_df)
 
     if accuracy_bool and "syn" in dataset_id:
         # Compute different accuracy metrics
@@ -194,7 +168,6 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
                "num_examples": num_tot_expl,
                "fidelity": fidelity,
                "avg_graph_dist": avg_graph_dist,
-               "avg_edit_dist": avg_edit_dist,
                "avg_sparsity": avg_sparsity}
 
     if accuracy_bool and "syn" in dataset_id:
