@@ -16,7 +16,7 @@ from torch_geometric.utils import dense_to_sparse, to_dense_adj
 # Works for all syn* datasets
 class SyntheticDataset(Dataset):
 
-    def __init__(self, dataset_id, n_layers=3):
+    def __init__(self, dataset_id, device=None, n_layers=3):
 
         self.n_layers = n_layers
 
@@ -31,6 +31,11 @@ class SyntheticDataset(Dataset):
         self.adj = torch.Tensor(full_dataset["adj"]).squeeze()
         self.features = torch.Tensor(full_dataset["feat"]).squeeze()
         self.labels = torch.LongTensor(full_dataset["labels"]).squeeze()
+
+        if device == "cuda":
+            self.adj = self.adj.cuda()
+            self.features = self.features.cuda()
+            self.labels = self.labels.cuda()
 
         # Needed for pytorch-geo functions, returns a sparse representation:
         # Edge indices: row/columns of cells containing non-zero entries
@@ -61,7 +66,7 @@ class SyntheticDataset(Dataset):
 
 class MUTAGDataset(Dataset):
 
-    def __init__(self, dataset_id):
+    def __init__(self, dataset_id, device=None):
 
         path = "../data/MUTAG/"
 
@@ -72,6 +77,7 @@ class MUTAGDataset(Dataset):
         np_features = np.loadtxt(path + "/MUTAG_node_labels.txt", dtype=int, unpack=True)
         tensor_features = torch.LongTensor(np_features)
         self.features = torch.nn.functional.one_hot(tensor_features)
+        self.features = self.features.type(torch.FloatTensor)
 
         # Graph indicator: tells which node belongs to which graph
         np_array_g_ind = np.loadtxt(path + "/MUTAG_graph_indicator.txt", dtype=int, unpack=True)
@@ -86,6 +92,12 @@ class MUTAGDataset(Dataset):
         self.adj = to_dense_adj(torch.LongTensor(sparse_np_adj)).squeeze()
         # Need to remove the top row and the left most col since the nodes in dataset start from 1
         self.adj = self.adj[1:,:][:, 1:]
+
+        if device == "cuda":
+            # Load data
+            self.adj = self.adj.cuda()
+            self.features = self.features.cuda()
+            self.labels = self.labels.cuda()
 
         # Group nodes by graph indicator
         graphs_df = pd.DataFrame(np_array_g_ind, columns=["Indicator"])
@@ -108,7 +120,7 @@ class MUTAGDataset(Dataset):
 
         # The node features are their label
         self.n_features = self.features.shape[1]
-        self.n_classes = len(np.unique(self.labels))
+        self.n_classes = len(torch.unique(self.labels))
         self.task = "graph-class"
 
     def __len__(self):
@@ -118,13 +130,18 @@ class MUTAGDataset(Dataset):
 
         cur_adj = self.adj_by_graph_arr[idx]
         num_nodes = cur_adj.shape[0]
-        adj_padded = torch.zeros((self.max_num_nodes, self.max_num_nodes))
-        adj_padded[:num_nodes, :num_nodes] = cur_adj
+        nodes_diff = abs(self.max_num_nodes - num_nodes)
 
+        # Pad bottom and right
+        pad_adj_f = torch.nn.ZeroPad2d((0, nodes_diff, 0, nodes_diff))
+        adj_padded = pad_adj_f(cur_adj)
+
+        # Pad bottom
+        pad_feat_f = torch.nn.ZeroPad2d((0, 0, 0, nodes_diff))
         cur_feat = self.feat_by_graph_arr[idx]
-        feat_padded = torch.zeros((self.max_num_nodes, self.n_features))
-        feat_padded[:num_nodes, :self.n_features] = cur_feat
+        feat_padded = pad_feat_f(cur_feat)
 
+        # Scalar, no need to pad
         label = self.labels[idx]
         num_nodes = cur_adj.shape[1]
 
@@ -144,7 +161,11 @@ class MUTAGDataset(Dataset):
         return train_idx, test_idx
 
 
-avail_datasets = {"syn1": SyntheticDataset,
-                  "syn4": SyntheticDataset,
-                  "syn5": SyntheticDataset,
-                  "MUTAG": MUTAGDataset}
+avail_datasets_dict = {"syn1": SyntheticDataset,
+                       "syn4": SyntheticDataset,
+                       "syn5": SyntheticDataset,
+                       "MUTAG": MUTAGDataset}
+datasets_name_dict = {"syn1": "BA-shapes (syn1)",
+                      "syn4": "Tree-Cycles (syn4)",
+                      "syn5": "Tree-Grid (syn5)",
+                      "MUTAG": "Mutagenicity (MUTAG)"}
