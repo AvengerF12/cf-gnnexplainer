@@ -23,6 +23,8 @@ hidden = 20
 dropout = 0.0
 
 
+# The purpose of accuracy is to evaluate how minimal the explanations are wrt the motif
+# learned by the underlying model
 def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
 
     # Load relevant data from dataset for model
@@ -51,8 +53,6 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
     # Get original predictions
     dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
                                y_pred_orig.numpy()))
-    dict_labels = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
-                           labels))
 
     accuracy = []
 
@@ -95,8 +95,8 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
         add_nodes_orig_idx = [node_dict_inv[new_idx] for new_idx in nodes_add_edges]
 
         # Retrieve original predictions
-        del_nodes_orig_ypred = np.array([dict_labels[k] for k in del_nodes_orig_idx])
-        add_nodes_orig_ypred = np.array([dict_labels[k] for k in add_nodes_orig_idx])
+        del_nodes_orig_ypred = np.array([dict_ypred_orig[k] for k in del_nodes_orig_idx])
+        add_nodes_orig_ypred = np.array([dict_ypred_orig[k] for k in add_nodes_orig_idx])
 
         # Retrieve nodes in motif (ground truth)
         del_nodes_in_motif = del_nodes_orig_ypred[del_nodes_orig_ypred != 0]
