@@ -74,8 +74,19 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
 
 
 # Create a symmetric matrix starting from the lower triangular part of another one
-# Note: ignores diagonal
-def create_symm_matrix_tril(matrix, device=None):
-    # -1 needed to enforce empty diagonal
+# The code is designed to avoid allocating additional tensors
+# Note: ignores diagonal, assumes square matrix input
+def create_symm_matrix_tril(matrix, final_side_len, device=None):
+    orig_side_len = matrix.shape[0]
+
     symm_matrix = torch.tril(matrix, -1) + torch.tril(matrix, -1).t()
+
+    # The symmetric matrix needs to be padded
+    if final_side_len != orig_side_len:
+        nodes_diff = abs(final_side_len - orig_side_len)
+
+        # Pad bottom and right
+        pad_f = torch.nn.ZeroPad2d((0, nodes_diff, 0, nodes_diff))
+        symm_matrix = pad_f(symm_matrix)
+
     return symm_matrix
