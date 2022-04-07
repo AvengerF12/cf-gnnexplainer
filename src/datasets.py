@@ -5,6 +5,7 @@ import os
 sys.path.append('..')
 import pickle
 import numpy as np
+from numpy.random import SeedSequence, default_rng
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -41,7 +42,7 @@ class SyntheticDataset(Dataset):
         self.task = "node-class"
 
     def __len__(self):
-        return len(self.dataset_idx)
+        return len(self.complete_idx)
 
     def __getitem__(self, orig_idx):
 
@@ -49,8 +50,9 @@ class SyntheticDataset(Dataset):
             get_neighbourhood(int(orig_idx), self.sparse_adj, self.n_layers + 1, self.features,
                               self.labels)
         new_idx = node_dict[int(orig_idx)]
+        num_nodes = sub_adj.shape[1]
 
-        return sub_adj, sub_feat, sub_labels, orig_idx, new_idx
+        return sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes
 
     # Fixed split
     def split_tr_ts_idx(self, train_ratio=None):
@@ -61,7 +63,6 @@ class MUTAGDataset(Dataset):
 
     def __init__(self, dataset_id):
 
-        # TODO: Add error if folder not present
         path = "../data/MUTAG/"
 
         # Sparse adjacency matrix
@@ -125,18 +126,20 @@ class MUTAGDataset(Dataset):
         feat_padded[:num_nodes, :self.n_features] = cur_feat
 
         label = self.labels[idx]
+        num_nodes = cur_adj.shape[1]
 
-        return adj_padded, feat_padded, label
+        return adj_padded, feat_padded, label, num_nodes
 
-    def split_tr_ts_idx(self, train_ratio=0.8):
+    def split_tr_ts_idx(self, train_ratio=0.8, seed=42):
 
         num_graphs = len(self)
         num_train = int(num_graphs * train_ratio)
-        idx = list(range(num_graphs))
+        idx_list = list(range(num_graphs))
+        rng_gen = default_rng(SeedSequence(seed).spawn(1)[0])
 
-        np.random.shuffle(idx)
-        train_idx = idx[:num_train]
-        test_idx = idx[num_train:]
+        rng_gen.shuffle(idx_list)
+        train_idx = idx_list[:num_train]
+        test_idx = idx_list[num_train:]
 
         return train_idx, test_idx
 
