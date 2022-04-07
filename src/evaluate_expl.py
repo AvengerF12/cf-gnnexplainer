@@ -151,7 +151,7 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     expl_df["num_edges"] = expl_df["sub_adj"].transform(lambda x: np.sum(x)/2)
 
     if accuracy_bool and "syn" in dataset_id:
-        # Compute different accuracy metrics
+        # Compute different accuracy metrics only for synthetic datasets
         accuracy_df = compute_accuracy_measures(expl_df, dataset_data, dataset_id, expl_task)
 
     if expl_task == "PP":
@@ -173,6 +173,7 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     if accuracy_bool and "syn" in dataset_id:
         avg_del_accuracy = np.mean(accuracy_df["del_prop_correct"])
         avg_add_accuracy = np.mean(accuracy_df["add_prop_correct"])
+
         results["avg_del_accuracy"] = avg_del_accuracy
         results["avg_add_accuracy"] = avg_add_accuracy
     else:
@@ -185,7 +186,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
 def evaluate_path_content(res_path):
 
     result_list = []
-    # MUTAG evaluation doesn't need the dataset since it cannot compute accuracy
+    # MUTAG evaluation doesn't need the dataset since computing accuracy w/o ground truths
+    # isn't useful
     dataset_list = ["syn1", "syn4", "syn5"]
     dataset_dict = {"MUTAG": None}
 
@@ -202,19 +204,12 @@ def evaluate_path_content(res_path):
             if ".ipynb" in path or ".txt" in path or ".csv" in path:
                 continue
 
-            # Extract some info from path
-            if "syn4" in path:
-                dataset_id = "syn4"
-                dataset_name = "Tree-Cycles (syn4)"
-            elif "syn5" in path:
-                dataset_id = "syn5"
-                dataset_name = "Tree-Grid (syn5)"
-            elif "syn1" in path:
-                dataset_id = "syn1"
-                dataset_name = "BA-shapes (syn1)"
-            elif "MUTAG" in path:
-                dataset_id = "MUTAG"
-                dataset_name = "Mutagenicity"
+            for cur_id in datasets.avail_datasets_dict:
+
+                if cur_id in path:
+                    dataset_id = cur_id
+                    dataset_name = datasets.datasets_name_dict[dataset_id]
+                    break
 
             if "PP" in path:
                 expl_task = "PP"
