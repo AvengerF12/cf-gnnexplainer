@@ -45,6 +45,9 @@ class SyntheticDataset(Dataset):
         self.n_features = self.features.shape[1]
         self.n_classes = len(self.labels.unique())
         self.task = "node-class"
+        # The k-hop graphs have all the same number of nodes, this var is only for compatibility
+        # It is only used in graph-class tasks
+        self.max_num_nodes = None
 
     def __len__(self):
         return len(self.complete_idx)

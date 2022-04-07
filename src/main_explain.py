@@ -41,17 +41,13 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     else:
         raise RuntimeError("Unsupported dataset")
 
-    if dataset.task == "node-class":
-        # Set up original model
-        model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
-                             nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task)
-    elif dataset.task == "graph-class":
-        # Set up original model
-        model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
-                             nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task,
-                             num_nodes=dataset.max_num_nodes)
-    else:
+    if dataset.task not in ["graph-class", "node-class"]:
         raise RuntimeError("Task not supported")
+
+    # Set up original model
+    model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
+                         nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task,
+                         num_nodes=dataset.max_num_nodes)
 
     # Load saved model parameters
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))

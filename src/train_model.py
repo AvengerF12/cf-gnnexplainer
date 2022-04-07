@@ -11,6 +11,7 @@ from utils.utils import normalize_adj
 from datasets import SyntheticDataset, MUTAGDataset
 from gcn import GCNSynthetic
 from sklearn.metrics import accuracy_score, precision_score, recall_score
+import datasets
 
 
 # Adapted from GNNExplainer paper in order to have similar results to CF-GNNExplainer
@@ -33,7 +34,7 @@ def train_graph_classifier(G_dataset, model, args):
         for idx in train_idx:
             model.zero_grad()
 
-            adj, feat, label = dataset[idx]
+            adj, feat, label, _ = dataset[idx]
 
             norm_adj = normalize_adj(adj)
 
@@ -72,7 +73,7 @@ def train_graph_classifier(G_dataset, model, args):
     test_ypred = []
 
     for idx in test_idx:
-        adj, feat, label = dataset[idx]
+        adj, feat, label, _ = dataset[idx]
 
         norm_adj = normalize_adj(adj)
 
@@ -171,16 +172,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.dataset in ["syn1", "syn4", "syn5"]:
-        dataset = SyntheticDataset(args.dataset, args.n_layers)
-        model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
-                             args.dropout, dataset.task)
+    dataset = datasets.avail_datasets_dict[args.dataset](args.dataset)
 
+    model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
+                         args.dropout, dataset.task, dataset.max_num_nodes)
+
+    if dataset.task == "node-class":
         train_node_classifier(dataset, model, args)
 
-    elif args.dataset == "MUTAG":
-        dataset = MUTAGDataset(args.dataset)
-        model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
-                             args.dropout, dataset.task, dataset.max_num_nodes)
-
+    elif dataset.task == "graph-class":
         train_graph_classifier(dataset, model, args)
