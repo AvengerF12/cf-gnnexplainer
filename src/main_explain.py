@@ -90,6 +90,9 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         # changes based on size of sub_adj
         # Note: sub_labels is just 1 label for graph class
         explainer = CFExplainer(model=model,
+                                cf_optimizer=optimizer,
+                                lr=lr,
+                                n_momentum=n_momentum,
                                 sub_adj=sub_adj,
                                 num_nodes=num_nodes,
                                 sub_feat=sub_feat,
@@ -98,13 +101,13 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 sub_labels=sub_labels,
                                 num_classes=dataset.n_classes,
                                 beta=beta,
+                                task=dataset.task,
                                 cem_mode=cem_mode,
                                 edge_del=edge_del,
                                 edge_add=edge_add,
                                 delta=delta,
                                 bernoulli=bernoulli,
                                 device=device,
-                                task=dataset.task,
                                 verbose=verbose)
 
         if cuda:
@@ -112,14 +115,12 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
 
         if dataset.task == "node-class":
 
-            cf_example = explainer.explain_node(task=dataset.task, cf_optimizer=optimizer,
-                                                node_idx=orig_idx, new_idx=new_idx,
-                                                y_pred_orig=y_pred_orig[new_idx], lr=lr,
-                                                n_momentum=n_momentum, num_epochs=num_epochs)
+            cf_example = explainer.explain(task=dataset.task, y_pred_orig=y_pred_orig,
+                                           node_idx=orig_idx, new_idx=new_idx,
+                                           num_epochs=num_epochs)
         elif dataset.task == "graph-class":
-            cf_example = explainer.explain_graph(task=dataset.task, cf_optimizer=optimizer,
-                                                 y_pred_orig=y_pred_orig, lr=lr,
-                                                 n_momentum=n_momentum, num_epochs=num_epochs)
+            cf_example = explainer.explain(task=dataset.task, num_epochs=num_epochs,
+                                           y_pred_orig=y_pred_orig)
 
         test_cf_examples.append(cf_example)
 
