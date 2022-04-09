@@ -264,7 +264,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     expl_df = pd.DataFrame(df_prep, columns=header)
 
     # Add num edges for each generated explanation
-    expl_df["num_edges"] = expl_df["sub_adj"].transform(lambda x: np.sum(x)/2)
+    expl_df["num_edges_adj"] = expl_df["sub_adj"].transform(lambda x: np.sum(x)/2)
+    expl_df["num_edges_expl"] = expl_df["cf_adj"].transform(lambda x: np.sum(x)/2)
 
     if accuracy_bool and "syn" in dataset_id:
         # Compute different accuracy metrics only for synthetic datasets
@@ -278,14 +279,14 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
         fidelity = 1 - num_valid_expl / num_tot_expl
 
     avg_graph_dist = np.mean(expl_df["loss_graph_dist"])
-    avg_sparsity = np.mean(1 - expl_df["loss_graph_dist"] / expl_df["num_edges"])
+    avg_change_ratio = np.mean(expl_df["num_edges_expl"] / expl_df["num_edges_adj"])
 
     results = {"dataset": dataset_name,
                "num_valid_expl": num_valid_expl,
                "num_examples": num_tot_expl,
                "fidelity": fidelity,
                "avg_graph_dist": avg_graph_dist,
-               "avg_sparsity": avg_sparsity}
+               "avg_change_ratio": avg_change_ratio}
 
     if accuracy_bool and "syn" in dataset_id:
         avg_del_accuracy_nodes = np.mean(accuracy_nodes_df["del_prop_correct"])
