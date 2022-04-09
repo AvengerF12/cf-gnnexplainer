@@ -23,38 +23,12 @@ hidden = 20
 dropout = 0.0
 
 
-# The purpose of accuracy is to evaluate how minimal the explanations are wrt the motif
-# learned by the underlying model
-def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
+def compute_edge_based_accuracy(df_motif, edge_index, features, labels, dict_ypred_orig, task):
 
-    # Load relevant data from dataset for model
-    # Note: no self-connections in syn*
-    adj = torch.Tensor(dataset["adj"]).squeeze()
-    features = torch.Tensor(dataset["feat"]).squeeze()
-    labels = torch.tensor(dataset["labels"]).squeeze()
-    idx_train = torch.tensor(dataset["train_idx"])
-    idx_test = torch.tensor(dataset["test_idx"])
-    edge_index = dense_to_sparse(adj)
+    add_prop_correct = 0
+    del_prop_correct = 0
 
-    # Re-assemble model
-    model = GCNSynthetic(nfeat=features.shape[1], nhid=hidden, nout=hidden,
-                         nclass=len(labels.unique()), dropout=dropout, task="node-class")
-    model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
-    model.eval()  # Model testing mode
-
-    norm_adj = normalize_adj(adj)
-    output = model(features, norm_adj)
-    y_pred_orig = torch.argmax(output, dim=1)
-
-    # For accuracy, only look at nodes that the model believes belong to the motif
-    # Note: 0 is used to mean that the node isn't in the motif
-    df_motif = cf_df[cf_df["y_pred_orig"] != 0].reset_index(drop=True)
-
-    # Get original predictions
-    dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
-                               y_pred_orig.numpy()))
-
-    accuracy = []
+    accuracy_edges = []
 
     # Compute accuracy
     for i in range(len(df_motif)):
@@ -62,6 +36,7 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
         node_idx = df_motif["node_idx"][i]
         new_idx = df_motif["new_idx"][i]
         _, _, _, node_dict = get_neighbourhood(int(node_idx), edge_index, 4, features, labels)
+        # Find orig_idx given new_idx
         node_dict_inv = {value: key for key, value in node_dict.items()}
 
         # Confirm idx mapping is correct
@@ -71,7 +46,104 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
         orig_adj = df_motif["sub_adj"][i]
         cf_adj = df_motif["cf_adj"][i]
 
-        # Note: the accuracy is measured only wrt to deleted edges
+        pert_del_edges = orig_adj - cf_adj
+        pert_del_edges[pert_del_edges == -1] = 0
+
+        pert_add_edges = cf_adj - orig_adj
+        pert_add_edges[pert_add_edges == -1] = 0
+
+        # Take into account only the lower half of the matrices since they are symmetric
+        pert_del_edges = np.tril(pert_del_edges, k=-1)
+        pert_add_edges = np.tril(pert_add_edges, k=-1)
+
+        # Changed edge indices
+        idx_del_edges = np.nonzero(pert_del_edges)
+        idx_add_edges = np.nonzero(pert_add_edges)
+
+        valid_del_edges = 0
+        total_del_edges = 0
+        for i in range(len(idx_del_edges[0])):
+            node_1 = idx_del_edges[0][i]
+            node_2 = idx_del_edges[1][i]
+
+            orig_idx_1 = node_dict_inv[node_1]
+            orig_idx_2 = node_dict_inv[node_2]
+
+            pred_1 = dict_ypred_orig[orig_idx_1]
+            pred_2 = dict_ypred_orig[orig_idx_2]
+
+            if pred_1 != 0 and pred_2 != 0:
+                valid_del_edges += 1
+
+            total_del_edges += 1
+
+        valid_add_edges = 0
+        total_add_edges = 0
+        for i in range(len(idx_add_edges[0])):
+            node_1 = idx_add_edges[0][i]
+            node_2 = idx_add_edges[1][i]
+
+            orig_idx_1 = node_dict_inv[node_1]
+            orig_idx_2 = node_dict_inv[node_2]
+
+            pred_1 = dict_ypred_orig[orig_idx_1]
+            pred_2 = dict_ypred_orig[orig_idx_2]
+
+            # Note: here the accuracy uses "or" in order to allow connections between
+            # the motif and a node outside it, allows for some flexibility by considering valid
+            # edges used to build a new motif by addition
+            if pred_1 != 0 or pred_2 != 0:
+                valid_add_edges += 1
+
+            total_add_edges += 1
+
+        # Sanity check in case of no change to sub_adj
+        # In case of PP it could be that the minimal explanation is the starting graph
+        if total_del_edges == 0 and total_add_edges == 0 and task != "PP":
+            raise RuntimeError("evaluate: sub_adj and cf_adj are identical")
+
+        # Handle situation in which edges are only added and del accuracy is NaN
+        if total_del_edges == 0:
+            del_prop_correct = np.NaN
+
+        else:
+            del_prop_correct = valid_del_edges / total_del_edges
+
+        if total_add_edges == 0:
+            add_prop_correct = np.NaN
+
+        else:
+            add_prop_correct = valid_add_edges / total_add_edges
+
+        accuracy_edges.append([node_idx, new_idx, del_prop_correct, add_prop_correct])
+
+    return accuracy_edges
+
+
+# Approach to compute accuracy used in paper, extended for edge addition
+def compute_node_based_accuracy(df_motif, edge_index, features, labels, dict_ypred_orig, task):
+
+    add_prop_correct = 0
+    del_prop_correct = 0
+
+    accuracy_nodes = []
+
+    # Compute accuracy
+    for i in range(len(df_motif)):
+        # These idxs are taken from the explainer output
+        node_idx = df_motif["node_idx"][i]
+        new_idx = df_motif["new_idx"][i]
+        _, _, _, node_dict = get_neighbourhood(int(node_idx), edge_index, 4, features, labels)
+        # Find orig_idx given new_idx
+        node_dict_inv = {value: key for key, value in node_dict.items()}
+
+        # Confirm idx mapping is correct
+        if node_dict[node_idx] != df_motif["new_idx"][i]:
+            raise RuntimeError("Error in node mapping")
+
+        orig_adj = df_motif["sub_adj"][i]
+        cf_adj = df_motif["cf_adj"][i]
+
         pert_del_edges = orig_adj - cf_adj
         pert_del_edges[pert_del_edges == -1] = 0
 
@@ -120,11 +192,55 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
         else:
             add_prop_correct = len(add_nodes_in_motif) / len(add_nodes_orig_idx)
 
-        accuracy.append([node_idx, new_idx, del_prop_correct, add_prop_correct])
+        accuracy_nodes.append([node_idx, new_idx, del_prop_correct, add_prop_correct])
 
-    df_accuracy = pd.DataFrame(accuracy, columns=["node_idx", "new_idx",
-                                                  "del_prop_correct", "add_prop_correct"])
-    return df_accuracy
+    return accuracy_nodes
+
+
+# The purpose of accuracy is to evaluate how minimal the explanations are wrt the motif
+# learned by the underlying model
+def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
+
+    # Load relevant data from dataset for model
+    # Note: no self-connections in syn*
+    adj = torch.Tensor(dataset["adj"]).squeeze()
+    features = torch.Tensor(dataset["feat"]).squeeze()
+    labels = torch.tensor(dataset["labels"]).squeeze()
+    idx_train = torch.tensor(dataset["train_idx"])
+    idx_test = torch.tensor(dataset["test_idx"])
+    edge_index = dense_to_sparse(adj)
+
+    # Re-assemble model
+    model = GCNSynthetic(nfeat=features.shape[1], nhid=hidden, nout=hidden,
+                         nclass=len(labels.unique()), dropout=dropout, task="node-class")
+    model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
+    model.eval()  # Model testing mode
+
+    norm_adj = normalize_adj(adj)
+    output = model(features, norm_adj)
+    y_pred_orig = torch.argmax(output, dim=1)
+
+    # For accuracy, only look at nodes that the model believes belong to the motif
+    # Note: 0 is used to mean that the node isn't in the motif
+    df_motif = cf_df[cf_df["y_pred_orig"] != 0].reset_index(drop=True)
+
+    # Get original predictions
+    dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
+                               y_pred_orig.numpy()))
+
+    accuracy_nodes = compute_node_based_accuracy(df_motif, edge_index, features,
+                                                 labels, dict_ypred_orig, task)
+    accuracy_edges = compute_edge_based_accuracy(df_motif, edge_index, features,
+                                                 labels, dict_ypred_orig, task)
+
+    df_accuracy_nodes = pd.DataFrame(accuracy_nodes, columns=["node_idx", "new_idx",
+                                                              "del_prop_correct",
+                                                              "add_prop_correct"])
+
+    df_accuracy_edges = pd.DataFrame(accuracy_edges, columns=["node_idx", "new_idx",
+                                                              "del_prop_correct",
+                                                              "add_prop_correct"])
+    return df_accuracy_nodes, df_accuracy_edges
 
 
 def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accuracy_bool=True):
@@ -152,7 +268,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
 
     if accuracy_bool and "syn" in dataset_id:
         # Compute different accuracy metrics only for synthetic datasets
-        accuracy_df = compute_accuracy_measures(expl_df, dataset_data, dataset_id, expl_task)
+        accuracy_nodes_df, accuracy_edges_df = \
+            compute_accuracy_measures(expl_df, dataset_data, dataset_id, expl_task)
 
     if expl_task == "PP":
         fidelity = num_valid_expl / num_tot_expl
@@ -171,14 +288,21 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
                "avg_sparsity": avg_sparsity}
 
     if accuracy_bool and "syn" in dataset_id:
-        avg_del_accuracy = np.mean(accuracy_df["del_prop_correct"])
-        avg_add_accuracy = np.mean(accuracy_df["add_prop_correct"])
+        avg_del_accuracy_nodes = np.mean(accuracy_nodes_df["del_prop_correct"])
+        avg_add_accuracy_nodes = np.mean(accuracy_nodes_df["add_prop_correct"])
 
-        results["avg_del_accuracy"] = avg_del_accuracy
-        results["avg_add_accuracy"] = avg_add_accuracy
+        avg_del_accuracy_edges = np.mean(accuracy_edges_df["del_prop_correct"])
+        avg_add_accuracy_edges = np.mean(accuracy_edges_df["add_prop_correct"])
+
+        results["avg_del_accuracy_nodes"] = avg_del_accuracy_nodes
+        results["avg_add_accuracy_nodes"] = avg_add_accuracy_nodes
+        results["avg_del_accuracy_edges"] = avg_del_accuracy_edges
+        results["avg_add_accuracy_edges"] = avg_add_accuracy_edges
     else:
-        results["avg_del_accuracy"] = np.NaN
-        results["avg_add_accuracy"] = np.NaN
+        results["avg_del_accuracy_nodes"] = np.NaN
+        results["avg_add_accuracy_nodes"] = np.NaN
+        results["avg_del_accuracy_edges"] = np.NaN
+        results["avg_add_accuracy_edges"] = np.NaN
 
     return results
 
