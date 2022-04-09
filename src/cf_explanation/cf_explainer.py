@@ -158,6 +158,10 @@ class CFExplainer:
             y_pred_orig = y_pred_orig[new_idx]
             output = output[new_idx]
             output_actual = output_actual[new_idx]
+            sub_label = self.sub_labels[new_idx]
+
+        else:
+            sub_label = self.sub_labels
 
         y_pred_new = torch.argmax(output)
         y_pred_new_actual = torch.argmax(output_actual)
@@ -212,14 +216,12 @@ class CFExplainer:
                 cf_stats = [node_idx, new_idx, cf_adj.detach().cpu().numpy(),
                             self.sub_adj.detach().cpu().numpy(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            self.sub_labels[new_idx].cpu().numpy(),
-                            self.sub_adj.shape[0], loss_graph_dist.item()]
+                            sub_label.cpu().numpy(), self.sub_adj.shape[0], loss_graph_dist.item()]
 
             else:
                 cf_stats = [node_idx, new_idx, cf_adj.detach().numpy(),
                             self.sub_adj.detach().numpy(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            self.sub_labels[new_idx].numpy(),
-                            self.sub_adj.shape[0], loss_graph_dist.item()]
+                            sub_label.numpy(), self.sub_adj.shape[0], loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())
