@@ -150,7 +150,10 @@ class MUTAGDataset(Dataset):
 
         return adj_padded, feat_padded, label, num_nodes
 
-    def split_tr_ts_idx(self, train_ratio=0.8, seed=42):
+    def split_tr_ts_idx(self, train_ratio=0.9, seed=42):
+        # Default split is:
+        # - 0: 60, 1: 109 for tr set
+        # - 0: 3, 1: 16 for ts set
 
         num_graphs = len(self)
         num_train = int(num_graphs * train_ratio)

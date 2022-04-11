@@ -100,6 +100,8 @@ def train_node_classifier(G_dataset, model, args):
     train_idx, test_idx = G_dataset.split_tr_ts_idx(train_ratio=args.train_ratio)
 
     # Train on whole adj since its a single connected component (valid for sun*, results may vary)
+    # Note: here we are assuming that to train a node classification gcn we need the entire adj,
+    # not just a neighbourhood
     adj = G_dataset.adj
     feat = G_dataset.features
     labels_train = G_dataset.labels[train_idx]

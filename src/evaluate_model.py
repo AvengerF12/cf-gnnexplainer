@@ -28,7 +28,7 @@ def evaluate_model(dataset, dataset_id):
     y_pred_list = []
     y_label_list = []
 
-    for idx in train_idx_list:
+    for idx in test_idx_list:
 
         if dataset.task == "node-class":
             sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes = dataset[idx]
