@@ -11,9 +11,10 @@ class GCNSyntheticPerturbOrig(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, nfeat, nhid, nout, nclass, adj, num_nodes, dropout, beta, task,
+    def __init__(self, model, nclass, adj, num_nodes, beta, task,
                  edge_del=False, edge_add=False, bernoulli=False, device=None):
         super(GCNSyntheticPerturbOrig, self).__init__()
+        self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
@@ -56,42 +57,6 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
         self.norm_eye = torch.eye(self.num_nodes_adj, device=device)
 
-        self.gc1 = GraphConvolution(nfeat, nhid)
-        self.gc2 = GraphConvolution(nhid, nhid)
-        self.gc3 = GraphConvolution(nhid, nout)
-
-        if self.task == "graph-class":
-            self.dim_lin = (nhid + nhid + nout) * self.num_nodes_adj
-            self.lin = nn.Linear(self.dim_lin, nclass)
-        elif self.task == "node-class":
-            self.dim_lin = nhid + nhid + nout
-            self.lin = nn.Linear(self.dim_lin, nclass)
-
-        self.dropout = dropout
-
-
-    def __apply_model(self, x, norm_adj):
-
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-
-        if self.task == "graph-class":
-            lin_in = torch.flatten(torch.cat((x1, x2, x3), dim=1))
-        elif self.task == "node-class":
-            lin_in = torch.cat((x1, x2, x3), dim=1)
-
-        x = self.lin(lin_in)
-
-        if self.task == "graph-class":
-            softmax_out = F.log_softmax(x, dim=0)
-        elif self.task == "node-class":
-            softmax_out = F.log_softmax(x, dim=1)
-
-        return softmax_out
-
 
     def forward(self, x):
 
@@ -124,8 +89,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
         norm_adj_diff = normalize_adj(A_tilde_diff, self.norm_eye, self.device)
         norm_adj_pred = normalize_adj(A_tilde_pred, self.norm_eye, self.device)
 
-        output_diff = self.__apply_model(x, norm_adj_diff)
-        output_pred = self.__apply_model(x, norm_adj_pred)
+        output_diff = self.model(x, norm_adj_diff)
+        output_pred = self.model(x, norm_adj_pred)
 
         return output_diff, output_pred
 
@@ -143,7 +108,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
 
-        output = self.__apply_model(x, norm_adj)
+        output = self.model(x, norm_adj)
 
         return output, output
 

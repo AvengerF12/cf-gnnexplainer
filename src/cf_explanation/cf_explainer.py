@@ -51,36 +51,29 @@ class CFExplainer:
 
         # Instantiate CF model class, load weights from original model
         if self.cem_mode == "PN" or self.cem_mode == "PP":
-            self.cf_model = GCNSyntheticPerturbCEM(self.sub_feat.shape[1], n_hid, n_hid,
-                                                   self.num_classes, self.sub_adj, num_nodes,
-                                                   dropout, beta, mode=self.cem_mode,
+            self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes,
+                                                   self.sub_adj, num_nodes, beta,
+                                                   mode=self.cem_mode,
                                                    device=self.device, task=self.task)
 
         elif self.cem_mode is None:
 
             if self.delta:
-                self.cf_model = GCNSyntheticPerturbDelta(self.sub_feat.shape[1], n_hid, n_hid,
-                                                         self.num_classes, self.sub_adj, num_nodes,
-                                                         dropout, beta, edge_del=self.edge_del,
+                self.cf_model = GCNSyntheticPerturbDelta(self.model, self.num_classes,
+                                                         self.sub_adj, num_nodes, beta,
+                                                         edge_del=self.edge_del,
                                                          edge_add=self.edge_add,
                                                          bernoulli=self.bernoulli,
                                                          device=self.device, task=self.task)
             else:
-                self.cf_model = GCNSyntheticPerturbOrig(self.sub_feat.shape[1], n_hid, n_hid,
-                                                        self.num_classes, self.sub_adj, num_nodes,
-                                                        dropout, beta, edge_del=self.edge_del,
+                self.cf_model = GCNSyntheticPerturbOrig(self.model, self.num_classes,
+                                                        self.sub_adj, num_nodes, beta,
+                                                        edge_del=self.edge_del,
                                                         edge_add=self.edge_add,
                                                         bernoulli=self.bernoulli, task=self.task,
                                                         device=self.device)
         else:
             raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
-
-        self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
-
-        # Freeze weights from original model in cf_model
-        for name, param in self.cf_model.named_parameters():
-            if name.endswith("weight") or name.endswith("bias"):
-                param.requires_grad = False
 
         if self.verbose:
             for name, param in self.model.named_parameters():
