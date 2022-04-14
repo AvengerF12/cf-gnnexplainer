@@ -18,6 +18,7 @@ class SyntheticDataset(Dataset):
 
     def __init__(self, dataset_id, device=None, n_layers=3):
 
+        self.dataset_id = dataset_id
         self.n_layers = n_layers
 
         with open("../data/gnn_explainer/{}.pickle".format(dataset_id[:4]), "rb") as f:
@@ -71,6 +72,7 @@ class MUTAGDataset(Dataset):
 
     def __init__(self, dataset_id, device=None):
 
+        self.dataset_id = dataset_id
         path = "../data/MUTAG/"
 
         # Sparse adjacency matrix
