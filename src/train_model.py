@@ -15,7 +15,7 @@ import datasets
 
 
 # Adapted from GNNExplainer paper in order to have similar results to CF-GNNExplainer
-def train_graph_classifier(G_dataset, model, args):
+def train_graph_classifier(G_dataset, model, device, args):
     train_idx, test_idx = G_dataset.split_tr_ts_idx(train_ratio=args.train_ratio)
 
     train_labels = dataset.labels[train_idx]
@@ -25,9 +25,10 @@ def train_graph_classifier(G_dataset, model, args):
     model.train()
     ypred = None
 
-    for epoch in range(args.num_epochs):
+    for epoch in range(1, args.num_epochs + 1):
         begin_time = time.time()
 
+        np.random.shuffle(train_idx)
         train_ypred = []
 
         # TODO: add mini-batch learning support
@@ -36,23 +37,19 @@ def train_graph_classifier(G_dataset, model, args):
 
             adj, feat, label, _ = dataset[idx]
 
-            norm_adj = normalize_adj(adj)
-
-            if args.cuda:
-                ypred = model(feat.cuda(), norm_adj.cuda())
-            else:
-                ypred = model(feat, norm_adj)
-
-            if args.cuda:
-                loss = model.loss(ypred, label.cuda())
-            else:
-                loss = model.loss(ypred, label)
+            norm_adj = normalize_adj(adj, device=device)
+            ypred = model(feat, norm_adj)
+            loss = model.loss(ypred, label)
 
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             optimizer.step()
 
             ypred_label = torch.argmax(ypred, axis=0)
+
+            if device == "cuda":
+                ypred_label = ypred_label.cpu()
+
             train_ypred.append(ypred_label)
 
         elapsed = time.time() - begin_time
@@ -64,9 +61,9 @@ def train_graph_classifier(G_dataset, model, args):
                 "; loss: ",
                 loss.item(),
                 "; train_acc: ",
-                accuracy_score(train_ypred, train_labels),
+                accuracy_score(train_ypred, train_labels.cpu()),
                 "; train_prec: ",
-                precision_score(train_ypred, train_labels, average=None),
+                precision_score(train_ypred, train_labels.cpu(), average=None),
                 "{0:0.2f}".format(elapsed),
             )
 
@@ -75,27 +72,27 @@ def train_graph_classifier(G_dataset, model, args):
     for idx in test_idx:
         adj, feat, label, _ = dataset[idx]
 
-        norm_adj = normalize_adj(adj)
-
-        if args.cuda:
-            ypred = model(feat.cuda(), norm_adj.cuda())
-        else:
-            ypred = model(feat, norm_adj)
+        norm_adj = normalize_adj(adj, device=device)
+        ypred = model(feat, norm_adj)
 
         ypred_label = torch.argmax(ypred, axis=0)
+
+        if device == "cuda":
+            ypred_label = ypred_label.cpu()
+
         test_ypred.append(ypred_label)
 
     print(
         "test_acc: ",
-        accuracy_score(test_ypred, test_labels),
+        accuracy_score(test_ypred, test_labels.cpu()),
         "; test_prec: ",
-        precision_score(test_ypred, test_labels, average=None),
+        precision_score(test_ypred, test_labels.cpu(), average=None),
     )
 
     torch.save(model.state_dict(), "../models/gcn_3layer_{}.pt".format(args.dataset))
 
 
-def train_node_classifier(G_dataset, model, args):
+def train_node_classifier(G_dataset, model, device, args):
 
     train_idx, test_idx = G_dataset.split_tr_ts_idx(train_ratio=args.train_ratio)
 
@@ -111,9 +108,9 @@ def train_node_classifier(G_dataset, model, args):
     model.train()
     ypred = None
 
-    norm_adj = normalize_adj(adj)
+    norm_adj = normalize_adj(adj, device=device)
 
-    for epoch in range(args.num_epochs):
+    for epoch in range(1, args.num_epochs + 1):
         begin_time = time.time()
         model.zero_grad()
 
@@ -174,13 +171,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    dataset = datasets.avail_datasets_dict[args.dataset](args.dataset)
+    if args.cuda:
+        device = "cuda"
+    else:
+        device = None
+
+    dataset = datasets.avail_datasets_dict[args.dataset](args.dataset, device=device)
 
     model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
                          args.dropout, dataset.task, dataset.max_num_nodes)
 
+    if args.cuda:
+        model = model.cuda()
+
     if dataset.task == "node-class":
-        train_node_classifier(dataset, model, args)
+        train_node_classifier(dataset, model, device, args)
 
     elif dataset.task == "graph-class":
-        train_graph_classifier(dataset, model, args)
+        train_graph_classifier(dataset, model, device, args)
