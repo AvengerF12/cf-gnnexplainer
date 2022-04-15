@@ -7,7 +7,7 @@ import pickle
 import numpy as np
 import time
 import torch
-from gcn import GCNSynthetic
+from models import GCNSynthetic, GraphAttNet
 from cf_explanation.cf_explainer import CFExplainer
 from utils.utils import normalize_adj, get_neighbourhood, safe_open
 from torch_geometric.utils import dense_to_sparse
@@ -45,9 +45,12 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         raise RuntimeError("Task not supported")
 
     # Set up original model
-    model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
-                         nclass=dataset.n_classes, dropout=dropout_r, task=dataset.task,
-                         num_nodes=dataset.max_num_nodes)
+    if dataset.task == "node-class":
+        model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
+                             nclass=dataset.n_classes, dropout=dropout_r)
+    elif dataset.task == "graph-class":
+        model = GraphAttNet(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
+                            nclass=dataset.n_classes, dropout=dropout_r)
 
     # Freeze weights in original model
     for name, param in model.named_parameters():

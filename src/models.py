@@ -46,30 +46,19 @@ class GraphConvolution(nn.Module):
 
 class GCNSynthetic(nn.Module):
     """
-    3-layer GCN used in GNN Explainer synthetic tasks, including
+    3-layer GCN used in GNN Explainer synthetic tasks
     """
     # num_nodes is used to determine the size of the flattened layer
     # It assumes that the max number of nodes in the graph adj matrices is num_nodes
-    def __init__(self, nfeat, nhid, nout, nclass, dropout, task, num_nodes=None):
+    def __init__(self, nfeat, nhid, nout, nclass, dropout):
         super(GCNSynthetic, self).__init__()
-
-        allowed_tasks = ["node-class", "graph-class"]
-
-        if task not in allowed_tasks:
-            raise RuntimeError("GCNSynthetic: invalid task specified")
-
-        self.task = task
 
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
 
-        if self.task == "graph-class":
-            self.dim_lin = (nhid + nhid + nout) * num_nodes
-            self.lin = nn.Linear(self.dim_lin, nclass)
-        elif self.task == "node-class":
-            self.dim_lin = nhid + nhid + nout
-            self.lin = nn.Linear(self.dim_lin, nclass)
+        self.dim_lin = nhid + nhid + nout
+        self.lin = nn.Linear(self.dim_lin, nclass)
 
         self.dropout = dropout
 
@@ -80,17 +69,56 @@ class GCNSynthetic(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
 
-        if self.task == "graph-class":
-            lin_in = torch.flatten(torch.cat((x1, x2, x3), dim=1))
-        elif self.task == "node-class":
-            lin_in = torch.cat((x1, x2, x3), dim=1)
-
+        lin_in = torch.cat((x1, x2, x3), dim=1)
         x = self.lin(lin_in)
+        softmax_out = F.log_softmax(x, dim=1)
 
-        if self.task == "graph-class":
-            softmax_out = F.log_softmax(x, dim=0)
-        elif self.task == "node-class":
-            softmax_out = F.log_softmax(x, dim=1)
+        return softmax_out
+
+    def loss(self, pred, label):
+        return F.nll_loss(pred, label)
+
+
+class GraphAttNet(nn.Module):
+    """
+    3-layer Graph Attention Network used in GNN Explainer graph classification tasks
+    """
+    # num_nodes is used to determine the size of the flattened layer
+    # It assumes that the max number of nodes in the graph adj matrices is num_nodes
+    def __init__(self, nfeat, nhid, nout, nclass, dropout):
+        super(GraphAttNet, self).__init__()
+
+        self.n_layers = 3
+
+        self.gc1 = GraphConvolution(nfeat, nhid)
+        self.gc2 = GraphConvolution(nhid, nhid)
+        self.gc3 = GraphConvolution(nhid, nout)
+
+        self.lin_dim = nhid * (self.n_layers - 1) + nout
+        self.lin = nn.Linear(self.lin_dim, nclass)
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        # Note: needs dim=1 in case of mini-batch training (also a big code refactor)
+        out_list = []
+
+        x1 = F.relu(self.gc1(x, adj))
+        x1 = F.dropout(x1, self.dropout, training=self.training)
+        out, _ = torch.max(x1, dim=0)
+        out_list.append(out)
+
+        x2 = F.relu(self.gc2(x1, adj))
+        x2 = F.dropout(x2, self.dropout, training=self.training)
+        out, _ = torch.max(x2, dim=0)
+        out_list.append(out)
+
+        x3 = self.gc3(x2, adj)
+        out, _ = torch.max(x3, dim=0)
+        out_list.append(out)
+
+        lin_in = torch.cat(out_list, dim=0)
+        x = self.lin(lin_in)
+        softmax_out = F.log_softmax(x, dim=0)
 
         return softmax_out
 

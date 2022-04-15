@@ -9,10 +9,12 @@ from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from utils.utils import normalize_adj
 from datasets import SyntheticDataset, MUTAGDataset
-from gcn import GCNSynthetic
+from models import GCNSynthetic, GraphAttNet
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 import datasets
 
+# Note: the model selection for the project has been already performed by the authors of
+# GNNExplainer, this script is only used to perform the training and model evaluation
 
 # Adapted from GNNExplainer paper in order to have similar results to CF-GNNExplainer
 def train_graph_classifier(G_dataset, model, device, args):
@@ -28,8 +30,8 @@ def train_graph_classifier(G_dataset, model, device, args):
     for epoch in range(1, args.num_epochs + 1):
         begin_time = time.time()
 
-        np.random.shuffle(train_idx)
         train_ypred = []
+        avg_loss = 0
 
         # TODO: add mini-batch learning support
         for idx in train_idx:
@@ -40,6 +42,7 @@ def train_graph_classifier(G_dataset, model, device, args):
             norm_adj = normalize_adj(adj, device=device)
             ypred = model(feat, norm_adj)
             loss = model.loss(ypred, label)
+            avg_loss += loss
 
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), args.clip)
@@ -52,6 +55,8 @@ def train_graph_classifier(G_dataset, model, device, args):
 
             train_ypred.append(ypred_label)
 
+        avg_loss /= len(train_idx)
+
         elapsed = time.time() - begin_time
 
         if epoch % 10 == 0:
@@ -59,7 +64,7 @@ def train_graph_classifier(G_dataset, model, device, args):
                 "epoch: ",
                 epoch,
                 "; loss: ",
-                loss.item(),
+                avg_loss,
                 "; train_acc: ",
                 accuracy_score(train_ypred, train_labels.cpu()),
                 "; train_prec: ",
@@ -178,8 +183,12 @@ if __name__ == "__main__":
 
     dataset = datasets.avail_datasets_dict[args.dataset](args.dataset, device=device)
 
-    model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
-                         args.dropout, dataset.task, dataset.max_num_nodes)
+    if dataset.task == "node-class":
+        model = GCNSynthetic(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
+                             args.dropout)
+    elif dataset.task == "graph-class":
+        model = GraphAttNet(dataset.n_features, args.hidden, args.hidden, dataset.n_classes,
+                            args.dropout)
 
     if args.cuda:
         model = model.cuda()

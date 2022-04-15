@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from utils.utils import get_degree_matrix, normalize_adj, BernoulliMLSample, create_symm_matrix_tril
-from gcn import GraphConvolution, GCNSynthetic
 
 
 class GCNSyntheticPerturbDelta(nn.Module):
@@ -20,7 +19,6 @@ class GCNSyntheticPerturbDelta(nn.Module):
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
-        self.task = task
 
         # Used to find the appropriate part of P to perturbate (w/o padding) and compute flattened
         # layer for graph classification (differs from num_nodes_adj only when task = graph-class)
@@ -36,10 +34,6 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
         if not edge_del and not edge_add:
             raise RuntimeError("GCNSyntheticPerturbDelta: need to specify allowed add/del op")
-
-        allowed_tasks = ["node-class", "graph-class"]
-        if self.task not in allowed_tasks:
-            raise RuntimeError("GCNSynthetic: invalid task specified")
 
         # Number of nodes in the adj, in case of graph-class includes padding
         self.num_nodes_adj = self.adj.shape[0]
