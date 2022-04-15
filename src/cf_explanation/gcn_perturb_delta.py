@@ -13,7 +13,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, model, nclass, adj, num_nodes, beta, task,
-                 edge_del=False, edge_add=False, bernoulli=False, device=None):
+                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True, device=None):
         super(GCNSyntheticPerturbDelta, self).__init__()
         self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
@@ -50,6 +50,15 @@ class GCNSyntheticPerturbDelta(nn.Module):
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         self.P_tril = Parameter(torch.zeros((self.num_nodes_actual, self.num_nodes_actual),
                                             device=self.device))
+
+        # The idea behind the init is simply to break any symmetries in the parameters, allowing
+        # for more diverse explanations by avoiding the simultaneous addition/deletion of relevant
+        # edges
+        if rand_init:
+            if self.bernoulli:
+                torch.nn.init.uniform_(self.P_tril, a=0, b=0.4)
+            else:
+                torch.nn.init.uniform_(self.P_tril, a=-0.4, b=0)
 
         # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
         self.norm_eye = torch.eye(self.num_nodes_adj, device=device)

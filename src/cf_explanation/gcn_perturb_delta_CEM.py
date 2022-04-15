@@ -18,7 +18,8 @@ class GCNSyntheticPerturbCEM(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, model, nclass, adj, num_nodes, beta, task, mode="PN", device=None):
+    def __init__(self, model, nclass, adj, num_nodes, beta, task, mode="PN", rand_init=True,
+                 device=None):
 
         super(GCNSyntheticPerturbCEM, self).__init__()
         self.model = model
@@ -47,6 +48,8 @@ class GCNSyntheticPerturbCEM(nn.Module):
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         self.P_tril = Parameter(torch.FloatTensor(torch.zeros(self.num_nodes_actual,
                                                               self.num_nodes_actual)))
+        if rand_init:
+            torch.nn.init.uniform_(self.P_tril, a=0, b=0.4)
 
         # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
         self.norm_eye = torch.eye(self.num_nodes_adj, device=device)

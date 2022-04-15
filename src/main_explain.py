@@ -17,7 +17,7 @@ import datasets
 def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500, cem_mode=None,
                  edge_del=False, edge_add=False, delta=False, bernoulli=False, cuda=False,
-                 verbose=False):
+                 rand_init=True, verbose=False):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -111,6 +111,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 edge_add=edge_add,
                                 delta=delta,
                                 bernoulli=bernoulli,
+                                rand_init=rand_init,
                                 device=device,
                                 verbose=verbose)
 
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (between 0 and 1)')
 
     # For explainer
-    parser.add_argument('--seed', type=int, default=42, help='Random seed.')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--lr', type=float, default=0.005, help='Learning rate for explainer')
     parser.add_argument('--optimizer', type=str, default="SGD", help='SGD or Adadelta')
     parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
@@ -204,6 +205,8 @@ if __name__ == "__main__":
                         help='Use bernoulli-based approach to generate P?')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='Activate CUDA support?')
+    parser.add_argument('--no_rand_init', action='store_true', default=False,
+                        help='Disable random initialisation of the P matrix')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help='Activate verbose output?')
 
@@ -211,4 +214,5 @@ if __name__ == "__main__":
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.beta, args.num_epochs, args.cem_mode,
-                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.cuda, args.verbose)
+                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.cuda,
+                 not args.no_rand_init, args.verbose)

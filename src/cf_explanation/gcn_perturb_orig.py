@@ -1,4 +1,5 @@
 import math
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,7 +13,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, model, nclass, adj, num_nodes, beta, task,
-                 edge_del=False, edge_add=False, bernoulli=False, device=None):
+                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True, device=None):
         super(GCNSyntheticPerturbOrig, self).__init__()
         self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
@@ -45,14 +46,31 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # Number of nodes in the adj, in case of graph-class includes padding
         self.num_nodes_adj = self.adj.shape[0]
 
-        # The optimizer will affect only the elements below the diag of this matrix
-        # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
+       # The optimizer will affect only the elements below the diag of this matrix
+       # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         if self.edge_add:
             # Initialize the matrix to the lower triangular part of the adj
             self.P_tril = Parameter(torch.tril(self.adj, -1).detach())
         else:
             self.P_tril = Parameter(torch.FloatTensor(torch.ones(self.num_nodes_actual,
                                                                  self.num_nodes_actual)))
+
+        # The idea behind the init is simply to break any symmetries in the parameters, allowing
+        # for more diverse explanations by avoiding the simultaneous addition/deletion of relevant
+        # edges
+        if rand_init and self.edge_add:
+            if self.bernoulli:
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1], a=0.6, b=1)
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0], a=0, b=0.4)
+            else:
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1], a=1, b=1.4)
+                # Note: the value must be below 0, otherwise the sigmoid will be >= 0.5
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0], a=-0.5, b=-0.1)
+        elif rand_init:
+            if self.bernoulli:
+                torch.nn.init.uniform_(self.P_tril, a=0.6, b=1)
+            else:
+                torch.nn.init.uniform_(self.P_tril, a=0.1, b=0.5)
 
         # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
         self.norm_eye = torch.eye(self.num_nodes_adj, device=device)
@@ -72,7 +90,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
     def __forward_std(self, x):
         # Applying sigmoid on P_tril instead of P_hat_symm avoids problems with
-        # diagonal equal to 1 when using edge_add, since sigmoid(0)=0.5
+        # diagonal equal to 1 during training when using edge_add, since sigmoid(0)=0.5
         P_hat_symm = torch.sigmoid(self.P_tril)
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
