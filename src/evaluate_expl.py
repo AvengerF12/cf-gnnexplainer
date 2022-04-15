@@ -10,7 +10,7 @@ import pandas as pd
 import pickle
 import torch
 from torch_geometric.utils import dense_to_sparse
-from gcn import GCNSynthetic
+from models import GCNSynthetic, GraphAttNet
 from utils.utils import normalize_adj, get_neighbourhood
 import datasets
 
@@ -212,7 +212,7 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
 
     # Re-assemble model
     model = GCNSynthetic(nfeat=features.shape[1], nhid=hidden, nout=hidden,
-                         nclass=len(labels.unique()), dropout=dropout, task="node-class")
+                         nclass=len(labels.unique()), dropout=dropout)
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
     model.eval()  # Model testing mode
 

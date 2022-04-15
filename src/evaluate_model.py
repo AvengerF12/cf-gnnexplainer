@@ -5,7 +5,7 @@ import pickle
 import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 sys.path.append('../../')
-from gcn import GCNSynthetic
+from models import GCNSynthetic, GraphAttNet
 from utils.utils import normalize_adj
 import datasets
 
@@ -17,9 +17,13 @@ dropout = 0.0
 def evaluate_model(dataset, dataset_id):
 
     # Re-assemble model
-    model = GCNSynthetic(nfeat=dataset.n_features, nhid=hidden, nout=hidden,
-                         nclass=dataset.n_classes, dropout=dropout, task=dataset.task,
-                         num_nodes=dataset.max_num_nodes)
+    if dataset.task == "node-class":
+        model = GCNSynthetic(nfeat=dataset.n_features, nhid=hidden, nout=hidden,
+                             nclass=dataset.n_classes, dropout=dropout)
+    elif dataset.task == "graph-class":
+        model = GraphAttNet(nfeat=dataset.n_features, nhid=hidden, nout=hidden,
+                            nclass=dataset.n_classes, dropout=dropout)
+
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
     model.eval()  # Model testing mode
 
