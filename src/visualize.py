@@ -24,10 +24,12 @@ def visualize(df, idx_cf, figsize=(20,15)):
 
     print("Target node: {}, label: {}".format(df["new_idx"][idx_cf], df["label"][idx_cf]))
     print("Graph distance loss: {}".format(df["loss_graph_dist"][idx_cf]))
-    print("Original prediction: {}, new prediciton: {}"
+    print("Original prediction: {}, new prediction: {}"
           .format(df["y_pred_orig"][idx_cf], df["y_pred_new_actual"][idx_cf]))
     num_nodes = df["num_nodes"][idx_cf]
     print("Num of nodes: {}".format(num_nodes))
+    num_edges = len(torch.nonzero(sub_adj)) / 2
+    print("Num of total edges: {}".format(num_edges))
 
     sparse_sub_adj = dense_to_sparse(sub_adj)[0].T.numpy()
     sparse_deleted_edges = dense_to_sparse(deleted_edges)[0].T.numpy()
