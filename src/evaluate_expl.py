@@ -279,14 +279,20 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
         fidelity = 1 - num_valid_expl / num_tot_expl
 
     avg_graph_dist = np.mean(expl_df["loss_graph_dist"])
-    avg_change_ratio = np.mean(expl_df["num_edges_expl"] / expl_df["num_edges_adj"])
+    std_graph_dist = np.std(expl_df["loss_graph_dist"])
+
+    ratio_edges_expl = expl_df["num_edges_expl"] / expl_df["num_edges_adj"]
+    avg_change_ratio = np.mean(ratio_edges_expl)
+    std_change_ratio = np.std(ratio_edges_expl)
 
     results = {"dataset": dataset_name,
                "num_valid_expl": num_valid_expl,
                "num_examples": num_tot_expl,
                "fidelity": fidelity,
                "avg_graph_dist": avg_graph_dist,
-               "avg_change_ratio": avg_change_ratio}
+               "std_graph_dist": std_graph_dist,
+               "avg_change_ratio": avg_change_ratio,
+               "std_change_ratio": std_change_ratio}
 
     if accuracy_bool and "syn" in dataset_id:
         avg_del_accuracy_nodes = np.mean(accuracy_nodes_df["del_prop_correct"])
