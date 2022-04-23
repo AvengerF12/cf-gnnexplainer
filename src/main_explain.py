@@ -164,13 +164,16 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
             format_path += "_delta"
 
         if bernoulli:
-            format_path += "_bernoulli/"
-        else:
-            format_path += "/"
+            format_path += "_bernoulli"
+
+        format_path += "/"
     else:
         format_path += "_" + cem_mode + "/"
 
     format_path += "{}/cf_examples_lr{}_beta{}_mom{}_epochs{}"
+
+    if rand_init:
+        format_path += "_rand"
 
     dest_path = format_path.format(dataset_id, optimizer, lr, beta, n_momentum, num_epochs)
 
