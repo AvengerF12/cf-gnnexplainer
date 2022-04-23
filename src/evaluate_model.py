@@ -6,7 +6,6 @@ import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 sys.path.append('../../')
 from models import GCNSynthetic, GraphAttNet
-from utils.utils import normalize_adj
 import datasets
 
 # Hyper-parameters for synthetic models
@@ -40,9 +39,7 @@ def evaluate_model(dataset, dataset_id):
         elif dataset.task == "graph-class":
             sub_adj, sub_feat, sub_labels, num_nodes = dataset[idx]
 
-        norm_adj = normalize_adj(sub_adj)
-
-        output = model(sub_feat, norm_adj)
+        output = model(sub_feat, sub_adj)
 
         if dataset.task == "node-class":
             y_pred = torch.argmax(output, dim=1)

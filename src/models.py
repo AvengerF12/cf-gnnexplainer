@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch_geometric.nn import GCNConv
+from utils.utils import normalize_adj
 
 
 class GraphConvolution(nn.Module):
@@ -62,7 +63,11 @@ class GCNSynthetic(nn.Module):
 
         self.dropout = dropout
 
-    def forward(self, x, adj):
+    def forward(self, x, adj, normalize=True):
+
+        if normalize:
+            adj = normalize_adj(adj)
+
         x1 = F.relu(self.gc1(x, adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
         x2 = F.relu(self.gc2(x1, adj))

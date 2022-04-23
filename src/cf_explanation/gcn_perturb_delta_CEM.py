@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from utils.utils import get_degree_matrix, normalize_adj, BernoulliMLSample, create_symm_matrix_tril
+from utils.utils import get_degree_matrix, BernoulliMLSample, create_symm_matrix_tril
 
 
 # This class implements the CEM framework adapted to the GCN model
@@ -72,10 +72,8 @@ class GCNSyntheticPerturbCEM(nn.Module):
         delta = (1 - self.adj) * P
         A_tilde = self.adj + delta
 
-        # Note: identity matrix is added in normalize_adj()
-        norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
-
-        output = self.model(x, norm_adj)
+        # Note: identity matrix is added in normalize_adj() inside model
+        output = self.model(x, A_tilde)
 
         return output
 
@@ -89,10 +87,8 @@ class GCNSyntheticPerturbCEM(nn.Module):
         delta = P * self.adj
         A_tilde = self.adj - delta
 
-        # Note: identity matrix is added in normalize_adj()
-        norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
-
-        output = self.model(x, norm_adj)
+        # Note: identity matrix is added in normalize_adj() inside model
+        output = self.model(x, A_tilde)
 
         return output
 

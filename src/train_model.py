@@ -7,7 +7,6 @@ import numpy as np
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
-from utils.utils import normalize_adj
 from datasets import SyntheticDataset, MUTAGDataset
 from models import GCNSynthetic, GraphAttNet
 from sklearn.metrics import accuracy_score, precision_score, recall_score
@@ -39,8 +38,7 @@ def train_graph_classifier(G_dataset, model, device, args):
 
             adj, feat, label, _ = dataset[idx]
 
-            norm_adj = normalize_adj(adj, device=device)
-            ypred = model(feat, norm_adj)
+            ypred = model(feat, adj)
             loss = model.loss(ypred, label)
             avg_loss += loss
 
@@ -77,8 +75,7 @@ def train_graph_classifier(G_dataset, model, device, args):
     for idx in test_idx:
         adj, feat, label, _ = dataset[idx]
 
-        norm_adj = normalize_adj(adj, device=device)
-        ypred = model(feat, norm_adj)
+        ypred = model(feat, adj)
 
         ypred_label = torch.argmax(ypred, axis=0)
 
@@ -106,6 +103,10 @@ def train_node_classifier(G_dataset, model, device, args):
     # not just a neighbourhood
     adj = G_dataset.adj
     feat = G_dataset.features
+    feat[feat == 1] = 10
+    G_dataset.labels[G_dataset.labels == 1] = -1
+    G_dataset.labels[G_dataset.labels == 0] = 1
+    G_dataset.labels[G_dataset.labels == -1] = 0
     labels_train = G_dataset.labels[train_idx]
     labels_test = G_dataset.labels[test_idx]
 
@@ -113,16 +114,14 @@ def train_node_classifier(G_dataset, model, device, args):
     model.train()
     ypred = None
 
-    norm_adj = normalize_adj(adj, device=device)
-
     for epoch in range(1, args.num_epochs + 1):
         begin_time = time.time()
         model.zero_grad()
 
         if args.cuda:
-            ypred = model(feat.cuda(), norm_adj.cuda())
+            ypred = model(feat.cuda(), adj.cuda())
         else:
-            ypred = model(feat, norm_adj)
+            ypred = model(feat, adj)
 
         ypred_train = ypred[train_idx, :]
         ypred_test = ypred[test_idx, :]

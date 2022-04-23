@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from utils.utils import get_degree_matrix, normalize_adj, BernoulliMLSample, create_symm_matrix_tril
+from utils.utils import get_degree_matrix, BernoulliMLSample, create_symm_matrix_tril
 
 
 class GCNSyntheticPerturbOrig(nn.Module):
@@ -66,9 +66,6 @@ class GCNSyntheticPerturbOrig(nn.Module):
             else:
                 torch.nn.init.uniform_(self.P_tril, a=0.1, b=0.5)
 
-        # Avoid creating an eye matrix for each normalize_adj op, re-use the same one
-        self.norm_eye = torch.eye(self.num_nodes_adj, device=device)
-
 
     def forward(self, x):
 
@@ -89,7 +86,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
-        # Note: identity matrix is added in normalize_adj()
+        # Note: identity matrix is added in normalize_adj() inside the model
         if self.edge_add:  # Learn new adj matrix directly
             # Use sigmoid to bound P_hat in [0,1]
             A_tilde_diff = P_hat_symm
@@ -98,11 +95,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
             A_tilde_diff = P_hat_symm * self.adj
             A_tilde_pred = P * self.adj
 
-        norm_adj_diff = normalize_adj(A_tilde_diff, self.norm_eye, self.device)
-        norm_adj_pred = normalize_adj(A_tilde_pred, self.norm_eye, self.device)
-
-        output_diff = self.model(x, norm_adj_diff)
-        output_pred = self.model(x, norm_adj_pred)
+        output_diff = self.model(x, A_tilde_diff)
+        output_pred = self.model(x, A_tilde_pred)
 
         return output_diff, output_pred
 
@@ -112,15 +106,13 @@ class GCNSyntheticPerturbOrig(nn.Module):
         P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
-        # Note: identity matrix is added in normalize_adj()
+        # Note: identity matrix is added in normalize_adj() inside model
         if self.edge_add:  # Learn new adj matrix directly
             A_tilde = P
         else:       # Learn only P_hat => only edge deletions
             A_tilde = P * self.adj
 
-        norm_adj = normalize_adj(A_tilde, self.norm_eye, self.device)
-
-        output = self.model(x, norm_adj)
+        output = self.model(x, A_tilde)
 
         return output, output
 

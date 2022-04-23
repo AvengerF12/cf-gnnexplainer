@@ -9,7 +9,7 @@ import time
 import torch
 from models import GCNSynthetic, GraphAttNet
 from cf_explanation.cf_explainer import CFExplainer
-from utils.utils import normalize_adj, get_neighbourhood, safe_open
+from utils.utils import get_neighbourhood, safe_open
 from torch_geometric.utils import dense_to_sparse
 import datasets
 
@@ -78,9 +78,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         elif dataset.task == "graph-class":
             sub_adj, sub_feat, sub_labels, num_nodes = dataset[i]
 
-        # According to reparam trick from GCN paper
-        norm_adj = normalize_adj(sub_adj, device=device)
-        output = model(sub_feat, norm_adj)
+        output = model(sub_feat, sub_adj)
 
         if dataset.task == "node-class":
             y_pred_orig = torch.argmax(output, dim=1)

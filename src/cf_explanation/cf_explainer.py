@@ -10,7 +10,6 @@ from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
 from .gcn_perturb_delta import GCNSyntheticPerturbDelta
 from .gcn_perturb_delta_CEM import GCNSyntheticPerturbCEM
-from utils.utils import normalize_adj
 
 
 class CFExplainer:
