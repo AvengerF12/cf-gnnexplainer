@@ -32,8 +32,8 @@ class GraphConvolution(nn.Module):
             self.bias.data.uniform_(-stdv, stdv)
 
     def forward(self, x, adj):
-        support = torch.mm(x, self.weight)
-        output = torch.spmm(adj, support)
+        support = torch.matmul(x, self.weight)
+        output = torch.matmul(adj, support)
         if self.bias is not None:
             return output + self.bias
         else:
@@ -109,21 +109,21 @@ class GraphAttNet(nn.Module):
 
         x1 = F.relu(self.gc1(x, adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
-        out, _ = torch.max(x1, dim=0)
+        out, _ = torch.max(x1, dim=1)
         out_list.append(out)
 
         x2 = F.relu(self.gc2(x1, adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
-        out, _ = torch.max(x2, dim=0)
+        out, _ = torch.max(x2, dim=1)
         out_list.append(out)
 
         x3 = self.gc3(x2, adj)
-        out, _ = torch.max(x3, dim=0)
+        out, _ = torch.max(x3, dim=1)
         out_list.append(out)
 
-        lin_in = torch.cat(out_list, dim=0)
+        lin_in = torch.cat(out_list, dim=1)
         x = self.lin(lin_in)
-        softmax_out = F.log_softmax(x, dim=0)
+        softmax_out = F.log_softmax(x, dim=1)
 
         return softmax_out
 

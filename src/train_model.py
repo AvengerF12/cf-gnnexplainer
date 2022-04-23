@@ -6,6 +6,7 @@ import torch.nn as nn
 import numpy as np
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import SubsetRandomSampler, DataLoader
 from utils.utils import get_degree_matrix
 from datasets import SyntheticDataset, MUTAGDataset
 from models import GCNSynthetic, GraphAttNet
@@ -19,41 +20,42 @@ import datasets
 def train_graph_classifier(G_dataset, model, device, args):
     train_idx, test_idx = G_dataset.split_tr_ts_idx(train_ratio=args.train_ratio)
 
-    train_labels = dataset.labels[train_idx]
-    test_labels = dataset.labels[test_idx]
+    tr_idx_sampler = SubsetRandomSampler(train_idx)
+    tr_dataloader = DataLoader(G_dataset, batch_size=args.batch_size, sampler=tr_idx_sampler)
+
+    ts_idx_sampler = SubsetRandomSampler(test_idx)
+    ts_dataloader = DataLoader(G_dataset, sampler=ts_idx_sampler)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
-    ypred = None
 
     for epoch in range(1, args.num_epochs + 1):
         begin_time = time.time()
 
-        train_ypred = []
         avg_loss = 0
+        train_ypred = []
+        train_labels = []
 
-        # TODO: add mini-batch learning support
-        for idx in train_idx:
+        for batch_idx, data in enumerate(tr_dataloader):
             model.zero_grad()
 
-            adj, feat, label, _ = dataset[idx]
+            adj, feat, label, _ = data
 
             ypred = model(feat, adj)
             loss = model.loss(ypred, label)
-            avg_loss += loss
 
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             optimizer.step()
 
-            ypred_label = torch.argmax(ypred, axis=0)
+            ypred_label = torch.argmax(ypred, axis=1)
 
             if device == "cuda":
                 ypred_label = ypred_label.cpu()
 
-            train_ypred.append(ypred_label)
-
-        avg_loss /= len(train_idx)
+            train_ypred += ypred_label
+            train_labels += label
+            avg_loss += loss
 
         elapsed = time.time() - begin_time
 
@@ -62,39 +64,43 @@ def train_graph_classifier(G_dataset, model, device, args):
                 "epoch: ",
                 epoch,
                 "; loss: ",
-                avg_loss,
+                avg_loss/len(train_labels),
                 "; train_acc: ",
-                accuracy_score(train_ypred, train_labels.cpu()),
+                accuracy_score(train_ypred, train_labels),
                 "; train_prec: ",
-                precision_score(train_ypred, train_labels.cpu(), average=None),
+                precision_score(train_ypred, train_labels, average=None),
                 "{0:0.2f}".format(elapsed),
             )
 
     test_ypred = []
+    test_labels = []
 
-    for idx in test_idx:
-        adj, feat, label, _ = dataset[idx]
+    for idx, data in enumerate(ts_dataloader):
+
+        adj, feat, label, _ = data
 
         ypred = model(feat, adj)
 
-        ypred_label = torch.argmax(ypred, axis=0)
+        ypred_label = torch.argmax(ypred, axis=1)
 
         if device == "cuda":
             ypred_label = ypred_label.cpu()
 
-        test_ypred.append(ypred_label)
+        test_ypred += ypred_label
+        test_labels += label
 
     print(
         "test_acc: ",
-        accuracy_score(test_ypred, test_labels.cpu()),
+        accuracy_score(test_ypred, test_labels),
         "; test_prec: ",
-        precision_score(test_ypred, test_labels.cpu(), average=None),
+        precision_score(test_ypred, test_labels, average=None),
     )
 
     torch.save(model.state_dict(), "../models/gcn_3layer_{}.pt".format(args.dataset))
 
 
 def train_node_classifier(G_dataset, model, device, args):
+    # Note: the training only support full-batch
 
     train_idx, test_idx = G_dataset.split_tr_ts_idx(train_ratio=args.train_ratio)
 
@@ -103,10 +109,6 @@ def train_node_classifier(G_dataset, model, device, args):
     # not just a neighbourhood
     adj = G_dataset.adj
     feat = G_dataset.features
-    feat[feat == 1] = 10
-    G_dataset.labels[G_dataset.labels == 1] = -1
-    G_dataset.labels[G_dataset.labels == 0] = 1
-    G_dataset.labels[G_dataset.labels == -1] = 0
     labels_train = G_dataset.labels[train_idx]
     labels_test = G_dataset.labels[test_idx]
 
@@ -170,6 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--weight-decay', type=float, default=0.005, help='Learning rate')
     parser.add_argument('--num-epochs', type=int, default=1000, help='Number of training epochs')
+    parser.add_argument("--batch-size", type=int, default=20, help="Batch size.")
     parser.add_argument('--train-ratio', type=float, default=0.9, help='Ratio of data used for tr')
     parser.add_argument('--cuda', action='store_true', default=False, help='Activate CUDA support?')
 
