@@ -43,10 +43,10 @@ def get_degree_matrix(adj):
     return torch.diag(torch.sum(adj, 1))
 
 
-def normalize_adj(adj, norm_eye=None, device=None):
+def normalize_adj(adj, norm_eye=None):
     # Normalize adjacancy matrix according to reparam trick in GCN paper
     if norm_eye is None:
-        A_tilde = adj + torch.eye(adj.shape[0], device=device)
+        A_tilde = adj + torch.eye(adj.shape[0], device=adj.device)
     else:
         A_tilde = adj + norm_eye
     D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient
