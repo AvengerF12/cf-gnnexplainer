@@ -1,5 +1,6 @@
 from __future__ import division
 from __future__ import print_function
+import os
 import sys
 sys.path.append('..')
 import argparse
@@ -78,15 +79,16 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         elif dataset.task == "graph-class":
             sub_adj, sub_feat, sub_labels, num_nodes = dataset[i]
 
+        sub_adj = sub_adj.expand(1, -1, -1)
         output = model(sub_feat, sub_adj)
 
         if dataset.task == "node-class":
-            y_pred_orig = torch.argmax(output, dim=1)
+            y_pred_orig = torch.argmax(output, dim=2)
         elif dataset.task == "graph-class":
-            y_pred_orig = torch.argmax(output, dim=0)
+            y_pred_orig = torch.argmax(output, dim=1)
 
         # Sanity check
-        sub_adj_diag = torch.diag(sub_adj)
+        sub_adj_diag = torch.diagonal(sub_adj, dim1=-2, dim2=-1)
         if sub_adj_diag[sub_adj_diag != 0].any():
             raise RuntimeError("Self-connections on graphs are not allowed")
 
@@ -176,6 +178,15 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         format_path += "_rand"
 
     dest_path = format_path.format(dataset_id, optimizer, lr, beta, n_momentum, num_epochs)
+
+    counter = 0
+    # If a random init already exists, don't overwrite and create a new file
+    while(rand_init):
+        if not os.path.exists(dest_path + str(counter)):
+            dest_path += str(counter)
+            break
+        else:
+            counter += 1
 
     with safe_open(dest_path, "wb") as f:
         pickle.dump(test_cf_examples, f)
