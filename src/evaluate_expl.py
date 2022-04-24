@@ -216,8 +216,7 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
     model.eval()  # Model testing mode
 
-    norm_adj = normalize_adj(adj)
-    output = model(features, norm_adj)
+    output = model(features, adj)
     y_pred_orig = torch.argmax(output, dim=1)
 
     # For accuracy, only look at nodes that the model believes belong to the motif
@@ -264,8 +263,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     expl_df = pd.DataFrame(df_prep, columns=header)
 
     # Add num edges for each generated explanation
-    expl_df["num_edges_adj"] = expl_df["sub_adj"].transform(lambda x: np.sum(x)/2)
-    expl_df["num_edges_expl"] = expl_df["cf_adj"].transform(lambda x: np.sum(x)/2)
+    expl_df["num_edges_adj"] = expl_df["sub_adj"].transform(lambda x: torch.sum(x)/2)
+    expl_df["num_edges_expl"] = expl_df["cf_adj"].transform(lambda x: torch.sum(x)/2)
 
     if accuracy_bool and "syn" in dataset_id:
         # Compute different accuracy metrics only for synthetic datasets
