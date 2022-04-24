@@ -150,9 +150,9 @@ class CFExplainer:
 
         if task == "node-class":
             # Need to use new_idx from now on since sub_adj is reindexed
-            y_pred_orig = y_pred_orig[new_idx]
-            output = output[new_idx]
-            output_actual = output_actual[new_idx]
+            y_pred_orig = y_pred_orig[:, new_idx]
+            output = output[:, new_idx]
+            output_actual = output_actual[:, new_idx]
             sub_label = self.sub_labels[new_idx]
 
         else:
@@ -212,7 +212,7 @@ class CFExplainer:
                             self.sub_adj.detach().squeeze().cpu(),
                             self.sub_feat.squeeze().cpu(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            sub_label.squeeze().cpu(), self.sub_adj.squeeze().shape[0],
+                            sub_label.squeeze().cpu(), self.num_nodes,
                             loss_graph_dist.item()]
 
             else:
@@ -220,7 +220,7 @@ class CFExplainer:
                             self.sub_adj.detach().squeeze(),
                             self.sub_feat.squeeze(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            sub_label.squeeze(), self.sub_adj.squeeze().shape[0],
+                            sub_label.squeeze(), self.num_nodes,
                             loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())
