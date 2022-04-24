@@ -101,13 +101,13 @@ class CFExplainer:
             raise RuntimeError(error_str)
 
         # Check cf_adj
-        if expl_example != [] and 1 in np.diag(expl_example[2]):
+        if expl_example != [] and 1 in torch.diagonal(expl_example[2], dim1=-2, dim2=-1):
             raise RuntimeError("cf_explainer: cf_adj contains a self-connection. Invalid result.")
 
-        if expl_example != [] and np.any(np.greater(expl_example[2], 1)):
+        if expl_example != [] and torch.any(torch.greater(expl_example[2], 1)):
             raise RuntimeError("cf_explainer: cf_adj contains values > 1. Invalid result.")
 
-        if expl_example != [] and np.any(np.less(expl_example[2], 0)):
+        if expl_example != [] and torch.any(torch.less(expl_example[2], 0)):
             raise RuntimeError("cf_explainer: cf_adj contains values < 0. Invalid result.")
 
 
@@ -208,15 +208,19 @@ class CFExplainer:
 
         if cond_PP or cond_cf:
             if self.device == "cuda":
-                cf_stats = [node_idx, new_idx, cf_adj.detach().cpu().numpy(),
-                            self.sub_adj.detach().cpu().numpy(),
+                cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze().cpu(),
+                            self.sub_adj.detach().squeeze().cpu(),
+                            self.sub_feat.squeeze().cpu(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            sub_label.cpu().numpy(), self.sub_adj.shape[0], loss_graph_dist.item()]
+                            sub_label.squeeze().cpu(), self.sub_adj.squeeze().shape[0],
+                            loss_graph_dist.item()]
 
             else:
-                cf_stats = [node_idx, new_idx, cf_adj.detach().numpy(),
-                            self.sub_adj.detach().numpy(),
+                cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze(),
+                            self.sub_adj.detach().squeeze(),
+                            self.sub_feat.squeeze(),
                             y_pred_orig.item(), y_pred_new_actual.item(),
-                            sub_label.numpy(), self.sub_adj.shape[0], loss_graph_dist.item()]
+                            sub_label.squeeze(), self.sub_adj.squeeze().shape[0],
+                            loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())
