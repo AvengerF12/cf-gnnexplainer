@@ -74,9 +74,9 @@ class GCNSynthetic(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
 
-        lin_in = torch.cat((x1, x2, x3), dim=1)
+        lin_in = torch.cat((x1, x2, x3), dim=2)
         x = self.lin(lin_in)
-        softmax_out = F.log_softmax(x, dim=1)
+        softmax_out = F.log_softmax(x, dim=2)
 
         return softmax_out
 
