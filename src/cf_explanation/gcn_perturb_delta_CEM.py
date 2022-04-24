@@ -36,7 +36,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         self.device = device
 
         # Number of nodes in the adj, in case of graph-class includes padding
-        self.num_nodes_adj = self.adj.shape[0]
+        self.num_nodes_adj = self.adj.shape[1]
 
         # The optimizer will affect only the elements below the diag of this matrix
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
@@ -65,7 +65,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PN(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_add equivalent
@@ -80,7 +80,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
     def __forward_PP(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # edge_del equivalent
@@ -94,7 +94,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PN(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -117,7 +117,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
 
 
     def loss_PP(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # Note: flipped the boolean since we want the same prediction

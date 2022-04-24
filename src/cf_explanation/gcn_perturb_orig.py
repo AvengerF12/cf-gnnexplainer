@@ -38,13 +38,13 @@ class GCNSyntheticPerturbOrig(nn.Module):
             print("Note: in this implementation enabling edge_add allows for both add and del")
 
         # Number of nodes in the adj, in case of graph-class includes padding
-        self.num_nodes_adj = self.adj.shape[0]
+        self.num_nodes_adj = self.adj.shape[1]
 
        # The optimizer will affect only the elements below the diag of this matrix
        # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         if self.edge_add:
             # Initialize the matrix to the lower triangular part of the adj
-            self.P_tril = Parameter(torch.tril(self.adj, -1).detach())
+            self.P_tril = Parameter(torch.tril(self.adj[0], -1).detach())
         else:
             self.P_tril = Parameter(torch.FloatTensor(torch.ones(self.num_nodes_actual,
                                                                  self.num_nodes_actual)))
@@ -83,7 +83,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # Applying sigmoid on P_tril instead of P_hat_symm avoids problems with
         # diagonal equal to 1 during training when using edge_add, since sigmoid(0)=0.5
         P_hat_symm = torch.sigmoid(self.P_tril)
-        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         # Note: identity matrix is added in normalize_adj() inside the model
@@ -103,7 +103,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
     def __forward_bernoulli(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         # Note: identity matrix is added in normalize_adj() inside model
@@ -119,7 +119,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
     def loss_std(self, output, y_pred_orig, y_pred_new_actual):
         P_hat_symm = torch.sigmoid(self.P_tril)
-        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -149,7 +149,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
 
     def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()

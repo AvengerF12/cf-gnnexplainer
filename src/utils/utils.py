@@ -38,26 +38,26 @@ def safe_open(path, w):
     return open(path, w)
 
 
-def get_degree_matrix(adj):
+def get_degree_matrix(batch_adj):
     # Output: vector containing the sum for each row
-    return torch.diag(torch.sum(adj, 1))
+    return torch.diag_embed(torch.sum(batch_adj, 2))
 
 
-def normalize_adj(adj, norm_eye=None):
+def normalize_adj(batch_adj, norm_eye=None):
     # Normalize adjacancy matrix according to reparam trick in GCN paper
     if norm_eye is None:
-        A_tilde = adj + torch.eye(adj.shape[0], device=adj.device)
+        A_tilde = batch_adj + torch.eye(batch_adj.shape[1], device=batch_adj.device)
     else:
-        A_tilde = adj + norm_eye
+        A_tilde = batch_adj + norm_eye
     D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient
     # Raise to power -1/2, set all infs to 0s
     D_tilde_exp = D_tilde ** (-1 / 2)
     D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
 
     # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I)^(-1/2)
-    norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+    norm_batch_adj = torch.matmul(torch.matmul(D_tilde_exp, A_tilde), D_tilde_exp)
 
-    return norm_adj
+    return norm_batch_adj
 
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
@@ -76,7 +76,7 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
 # Create a symmetric matrix starting from the lower triangular part of another one
 # The code is designed to avoid allocating additional tensors
 # Note: ignores diagonal, assumes square matrix input
-def create_symm_matrix_tril(matrix, final_side_len, device=None):
+def create_symm_matrix_tril(matrix, final_side_len):
     orig_side_len = matrix.shape[0]
 
     symm_matrix = torch.tril(matrix, -1) + torch.tril(matrix, -1).t()

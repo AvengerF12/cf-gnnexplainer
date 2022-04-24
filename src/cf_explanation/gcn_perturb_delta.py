@@ -36,7 +36,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
             raise RuntimeError("GCNSyntheticPerturbDelta: need to specify allowed add/del op")
 
         # Number of nodes in the adj, in case of graph-class includes padding
-        self.num_nodes_adj = self.adj.shape[0]
+        self.num_nodes_adj = self.adj.shape[1]
 
         # The optimizer will affect only the elements below the diag of this matrix
         # This is enforced through the function create_symm_matrix_tril(), which constructs the 
@@ -72,7 +72,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
         # Applying sigmoid on P_tril instead of P_hat_symm avoids problems with
         # diagonal equal to 1 when using edge_add, since sigmoid(0)=0.5 >= threshold already
         P_hat_symm = torch.sigmoid(self.P_tril)
-        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         # Note: identity matrix is added in normalize_adj() inside model
@@ -98,7 +98,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
     def __forward_bernoulli(self, x):
 
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
         delta = 0
 
@@ -118,7 +118,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
     def loss_std(self, output, y_pred_orig, y_pred_new_actual):
         P_hat_symm = torch.sigmoid(self.P_tril)
-        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -152,7 +152,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
 
     def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual):
-        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj, self.device)
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
         pred_same = (y_pred_new_actual == y_pred_orig).float()
