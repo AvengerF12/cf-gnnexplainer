@@ -17,8 +17,8 @@ import datasets
 
 default_path = "../results/"
 
-header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "y_pred_orig", "y_pred_new_actual",
-          "label", "num_nodes", "loss_graph_dist"]
+header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "sub_feat", "y_pred_orig",
+          "y_pred_new_actual", "label", "num_nodes", "loss_graph_dist"]
 hidden = 20
 dropout = 0.0
 
@@ -155,8 +155,8 @@ def compute_node_based_accuracy(df_motif, edge_index, features, labels, dict_ypr
         idx_add_edges = np.nonzero(pert_add_edges)
 
         # Find idx of nodes involved in the edge perturbations
-        nodes_del_edges = np.unique(np.concatenate((idx_del_edges[0], idx_del_edges[1]), axis=0))
-        nodes_add_edges = np.unique(np.concatenate((idx_add_edges[0], idx_add_edges[1]), axis=0))
+        nodes_del_edges = np.unique(idx_del_edges)
+        nodes_add_edges = np.unique(idx_add_edges)
 
         # Remove original node since we already know its prediction
         nodes_del_edges = nodes_del_edges[nodes_del_edges != new_idx]
@@ -216,8 +216,8 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
     model.eval()  # Model testing mode
 
-    output = model(features, adj)
-    y_pred_orig = torch.argmax(output, dim=1)
+    output = model(features, adj.expand(1, -1, -1))
+    y_pred_orig = torch.argmax(output, dim=2).squeeze()
 
     # For accuracy, only look at nodes that the model believes belong to the motif
     # Note: 0 is used to mean that the node isn't in the motif
@@ -225,7 +225,7 @@ def compute_accuracy_measures(cf_df, dataset, dataset_id, task):
 
     # Get original predictions
     dict_ypred_orig = dict(zip(sorted(np.concatenate((idx_train.numpy(), idx_test.numpy()))),
-                               y_pred_orig.numpy()))
+                               y_pred_orig))
 
     accuracy_nodes = compute_node_based_accuracy(df_motif, edge_index, features,
                                                  labels, dict_ypred_orig, task)
