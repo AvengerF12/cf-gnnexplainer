@@ -211,7 +211,7 @@ class CFExplainer:
                 cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze().cpu(),
                             self.sub_adj.detach().squeeze().cpu(),
                             self.sub_feat.squeeze().cpu(),
-                            y_pred_orig.item(), y_pred_new_actual.item(),
+                            y_pred_orig, y_pred_new_actual,
                             sub_label.squeeze().cpu(), self.num_nodes,
                             loss_graph_dist.item()]
 
@@ -219,7 +219,7 @@ class CFExplainer:
                 cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze(),
                             self.sub_adj.detach().squeeze(),
                             self.sub_feat.squeeze(),
-                            y_pred_orig.item(), y_pred_new_actual.item(),
+                            y_pred_orig, y_pred_new_actual,
                             sub_label.squeeze(), self.num_nodes,
                             loss_graph_dist.item()]
 
