@@ -44,7 +44,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
        # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
         if self.edge_add:
             # Initialize the matrix to the lower triangular part of the adj
-            self.P_tril = Parameter(torch.tril(self.adj[0], -1).detach())
+            self.P_tril = Parameter(torch.tril(self.adj, -1).detach())
         else:
             self.P_tril = Parameter(torch.FloatTensor(torch.ones(self.num_nodes_actual,
                                                                  self.num_nodes_actual)))
@@ -95,8 +95,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
             A_tilde_diff = P_hat_symm * self.adj
             A_tilde_pred = P * self.adj
 
-        output_diff = self.model(x, A_tilde_diff)
-        output_pred = self.model(x, A_tilde_pred)
+        output_diff = self.model(x, A_tilde_diff.expand(1, -1, -1)).squeeze()
+        output_pred = self.model(x, A_tilde_pred.expand(1, -1, -1)).squeeze()
 
         return output_diff, output_pred
 
@@ -112,7 +112,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         else:       # Learn only P_hat => only edge deletions
             A_tilde = P * self.adj
 
-        output = self.model(x, A_tilde)
+        output = self.model(x, A_tilde.expand(1, -1, -1)).squeeze()
 
         return output, output
 

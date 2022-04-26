@@ -40,7 +40,7 @@ def safe_open(path, w):
 
 def get_degree_matrix(batch_adj):
     # Output: vector containing the sum for each row
-    return torch.diag_embed(torch.sum(batch_adj, 2))
+    return torch.diag_embed(torch.sum(batch_adj, -1))
 
 
 def normalize_adj(batch_adj, norm_eye=None):
@@ -61,9 +61,9 @@ def normalize_adj(batch_adj, norm_eye=None):
 
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
-    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index[0])     # Get all nodes involved
-    edge_subset_relabel = subgraph(edge_subset[0], edge_index[0], relabel_nodes=True)       # Get relabelled subset of edges
-    sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
+    # Get all nodes involved and relabel them
+    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index[0], relabel_nodes=True)
+    sub_adj = to_dense_adj(edge_subset[1]).squeeze()
     sub_feat = features[edge_subset[0], :]
     sub_labels = labels[edge_subset[0]]
     new_index = np.array(range(len(edge_subset[0])))

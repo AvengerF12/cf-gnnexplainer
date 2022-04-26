@@ -73,7 +73,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         A_tilde = self.adj + delta
 
         # Note: identity matrix is added in normalize_adj() inside model
-        output = self.model(x, A_tilde)
+        output = self.model(x, A_tilde.expand(1, -1, -1)).squeeze()
 
         return output
 
@@ -88,7 +88,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         A_tilde = self.adj - delta
 
         # Note: identity matrix is added in normalize_adj() inside model
-        output = self.model(x, A_tilde)
+        output = self.model(x, A_tilde.expand(1, -1, -1)).squeeze()
 
         return output
 

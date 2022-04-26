@@ -49,8 +49,6 @@ class GCNSynthetic(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    # num_nodes is used to determine the size of the flattened layer
-    # It assumes that the max number of nodes in the graph adj matrices is num_nodes
     def __init__(self, nfeat, nhid, nout, nclass, dropout):
         super(GCNSynthetic, self).__init__()
 
@@ -65,6 +63,13 @@ class GCNSynthetic(nn.Module):
 
     def forward(self, x, adj, normalize=True):
 
+        squeezed = False
+        # Speed up explainer in case of batch of size 1
+        # Hp: matmul reverts to mm for efficiency
+        if adj.dim() == 3 and adj.shape[0] == 1:
+            adj = adj.squeeze()
+            squeezed = True
+
         if normalize:
             adj = normalize_adj(adj)
 
@@ -74,9 +79,12 @@ class GCNSynthetic(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
 
-        lin_in = torch.cat((x1, x2, x3), dim=2)
+        lin_in = torch.cat((x1, x2, x3), dim=-1)
         x = self.lin(lin_in)
-        softmax_out = F.log_softmax(x, dim=2)
+        softmax_out = F.log_softmax(x, dim=-1).squeeze()
+
+        if squeezed:
+            softmax_out = softmax_out.expand(1, -1, -1)
 
         return softmax_out
 
@@ -88,8 +96,6 @@ class GraphAttNet(nn.Module):
     """
     3-layer Graph Attention Network used in GNN Explainer graph classification tasks
     """
-    # num_nodes is used to determine the size of the flattened layer
-    # It assumes that the max number of nodes in the graph adj matrices is num_nodes
     def __init__(self, nfeat, nhid, nout, nclass, dropout):
         super(GraphAttNet, self).__init__()
 
@@ -106,24 +112,32 @@ class GraphAttNet(nn.Module):
     def forward(self, x, adj):
         # Note: needs dim=1 in case of mini-batch training (also a big code refactor)
         out_list = []
+        squeezed = False
+
+        if adj.dim() == 3 and adj.shape[0] == 1:
+            adj = adj.squeeze()
+            squeezed = True
 
         x1 = F.relu(self.gc1(x, adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
-        out, _ = torch.max(x1, dim=1)
+        out, _ = torch.max(x1, dim=-2)
         out_list.append(out)
 
         x2 = F.relu(self.gc2(x1, adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
-        out, _ = torch.max(x2, dim=1)
+        out, _ = torch.max(x2, dim=-2)
         out_list.append(out)
 
         x3 = self.gc3(x2, adj)
-        out, _ = torch.max(x3, dim=1)
+        out, _ = torch.max(x3, dim=-2)
         out_list.append(out)
 
-        lin_in = torch.cat(out_list, dim=1)
+        lin_in = torch.cat(out_list, dim=-1)
         x = self.lin(lin_in)
-        softmax_out = F.log_softmax(x, dim=1)
+        softmax_out = F.log_softmax(x, dim=-1)
+
+        if squeezed:
+            softmax_out = softmax_out.expand(1, -1)
 
         return softmax_out
 

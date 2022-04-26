@@ -137,22 +137,22 @@ class CFExplainer:
                 best_loss = loss_total
                 num_cf_examples += 1
 
-        self.debug_check_expl(best_cf_example)
+        with torch.no_grad():
+            self.debug_check_expl(best_cf_example)
 
         return (best_cf_example, best_loss)
 
 
     def train_expl(self, task, epoch, y_pred_orig, node_idx=None, new_idx=None):
-        self.cf_model.train() # Set Module to training mode
         self.cf_optimizer.zero_grad()
 
         output, output_actual = self.cf_model.forward(self.sub_feat)
 
         if task == "node-class":
             # Need to use new_idx from now on since sub_adj is reindexed
-            y_pred_orig = y_pred_orig[:, new_idx]
-            output = output[:, new_idx]
-            output_actual = output_actual[:, new_idx]
+            y_pred_orig = y_pred_orig[new_idx]
+            output = output[new_idx]
+            output_actual = output_actual[new_idx]
             sub_label = self.sub_labels[new_idx]
 
         else:
@@ -200,27 +200,28 @@ class CFExplainer:
                   'new pred nondiff: {}'.format(y_pred_new_actual))
             print(" ")
 
-        # Note: when updating output format, also update checks
-        cf_stats = []
-        cond_PP = self.cem_mode == "PP" and y_pred_new_actual == y_pred_orig
-        # Needed to avoid including PP with different predictions
-        cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
+        with torch.no_grad():
+            # Note: when updating output format, also update checks
+            cf_stats = []
+            cond_PP = self.cem_mode == "PP" and y_pred_new_actual == y_pred_orig
+            # Needed to avoid including PP with different predictions
+            cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
 
-        if cond_PP or cond_cf:
-            if self.device == "cuda":
-                cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze().cpu(),
-                            self.sub_adj.detach().squeeze().cpu(),
-                            self.sub_feat.squeeze().cpu(),
-                            y_pred_orig, y_pred_new_actual,
-                            sub_label.squeeze().cpu(), self.num_nodes,
-                            loss_graph_dist.item()]
+            if cond_PP or cond_cf:
+                if self.device == "cuda":
+                    cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze().cpu(),
+                                self.sub_adj.squeeze().cpu(),
+                                self.sub_feat.squeeze().cpu(),
+                                y_pred_orig, y_pred_new_actual,
+                                sub_label.squeeze().cpu(), self.num_nodes,
+                                loss_graph_dist.item()]
 
-            else:
-                cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze(),
-                            self.sub_adj.detach().squeeze(),
-                            self.sub_feat.squeeze(),
-                            y_pred_orig, y_pred_new_actual,
-                            sub_label.squeeze(), self.num_nodes,
-                            loss_graph_dist.item()]
+                else:
+                    cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze(),
+                                self.sub_adj.squeeze(),
+                                self.sub_feat.squeeze(),
+                                y_pred_orig, y_pred_new_actual,
+                                sub_label.squeeze(), self.num_nodes,
+                                loss_graph_dist.item()]
 
         return(cf_stats, loss_total.item())

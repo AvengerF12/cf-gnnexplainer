@@ -90,8 +90,8 @@ class GCNSyntheticPerturbDelta(nn.Module):
         A_tilde_diff = self.adj + delta_diff
         A_tilde_pred = self.adj + delta_pred
 
-        output_diff = self.model(x, A_tilde_diff)
-        output_pred = self.model(x, A_tilde_pred)
+        output_diff = self.model(x, A_tilde_diff.expand(1, -1, -1)).squeeze()
+        output_pred = self.model(x, A_tilde_pred.expand(1, -1, -1)).squeeze()
 
         return output_diff, output_pred
 
@@ -111,7 +111,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
         A_tilde = self.adj + delta
 
-        output = self.model(x, A_tilde)
+        output = self.model(x, A_tilde.expand(1, -1, -1)).squeeze()
 
         return output, output
 

@@ -46,6 +46,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         raise RuntimeError("Task not supported")
 
     # Set up original model
+    # Note: it is assumed that the models work with batches of data
     if dataset.task == "node-class":
         model = GCNSynthetic(nfeat=dataset.n_features, nhid=hid_units, nout=hid_units,
                              nclass=dataset.n_classes, dropout=dropout_r)
@@ -79,19 +80,18 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         elif dataset.task == "graph-class":
             sub_adj, sub_feat, sub_labels, num_nodes = dataset[i]
 
-        sub_adj = sub_adj.expand(1, -1, -1)
-        output = model(sub_feat, sub_adj)
+        with torch.no_grad():
+            output = model(sub_feat, sub_adj.expand(1, -1, -1)).squeeze()
 
-        if dataset.task == "node-class":
-            y_pred_orig = torch.argmax(output, dim=2)
-        elif dataset.task == "graph-class":
-            y_pred_orig = torch.argmax(output, dim=1)
+            if dataset.task == "node-class":
+                y_pred_orig = torch.argmax(output, dim=1)
+            elif dataset.task == "graph-class":
+                y_pred_orig = torch.argmax(output, dim=0)
 
         # Sanity check
-        sub_adj_diag = torch.diagonal(sub_adj, dim1=-2, dim2=-1)
+        sub_adj_diag = torch.diag(sub_adj)
         if sub_adj_diag[sub_adj_diag != 0].any():
             raise RuntimeError("Self-connections on graphs are not allowed")
-
 
         # Need to instantitate new cf_model for each instance because size of P
         # changes based on size of sub_adj
