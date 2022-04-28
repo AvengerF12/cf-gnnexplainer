@@ -275,6 +275,9 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
         accuracy_nodes_df, accuracy_edges_df = \
             compute_accuracy_measures(expl_df, dataset_data, dataset_id, expl_task)
 
+    len_expl_list = expl_df["expl_list"].transform(lambda x: len(x))
+    avg_history_len = np.mean(len_expl_list)
+
     if expl_task == "PP":
         fidelity = num_valid_expl / num_tot_expl
     else:
@@ -292,7 +295,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
 
     results = {"dataset": dataset_name,
                "num_valid_expl": num_valid_expl,
-               "num_examples": num_tot_expl,
+               "num_tot_instances": num_tot_expl,
+               "avg_history_len": avg_history_len,
                "fidelity": fidelity,
                "avg_graph_dist": avg_graph_dist,
                "std_graph_dist": std_graph_dist,
