@@ -65,26 +65,28 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     if cuda:
         model = model.cuda()
 
-    # Get CF examples in test set
-    test_cf_examples = []
+    # Get explanations for data in test set
+    test_expls = []
     start = time.time()
     # Note: these are the nodes for which explanations are generated
     _, test_idx_list = dataset.split_tr_ts_idx()
-    num_cf_found = 0
+    num_expl_found = 0
 
     for i in test_idx_list:
 
         if dataset.task == "node-class":
             sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes = dataset[i]
+            sub_label = sub_labels[new_idx]
 
         elif dataset.task == "graph-class":
-            sub_adj, sub_feat, sub_labels, num_nodes = dataset[i]
+            sub_adj, sub_feat, sub_label, num_nodes = dataset[i]
 
         with torch.no_grad():
             output = model(sub_feat, sub_adj.expand(1, -1, -1)).squeeze()
 
             if dataset.task == "node-class":
                 y_pred_orig = torch.argmax(output, dim=1)
+                y_pred_orig = y_pred_orig[new_idx]
             elif dataset.task == "graph-class":
                 y_pred_orig = torch.argmax(output, dim=0)
 
@@ -105,7 +107,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 sub_feat=sub_feat,
                                 n_hid=hid_units,
                                 dropout=dropout_r,
-                                sub_labels=sub_labels,
+                                sub_label=sub_label,
                                 num_classes=dataset.n_classes,
                                 beta=beta,
                                 task=dataset.task,
@@ -115,6 +117,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 delta=delta,
                                 bernoulli=bernoulli,
                                 rand_init=rand_init,
+                                history=args.history,
                                 device=device,
                                 verbose=verbose)
 
@@ -123,18 +126,18 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
 
         if dataset.task == "node-class":
 
-            cf_example = explainer.explain(task=dataset.task, y_pred_orig=y_pred_orig,
-                                           node_idx=orig_idx, new_idx=new_idx,
-                                           num_epochs=num_epochs)
+            expl, num_expl_inst = explainer.explain(task=dataset.task, y_pred_orig=y_pred_orig,
+                                                    node_idx=orig_idx, new_idx=new_idx,
+                                                    num_epochs=num_epochs)
         elif dataset.task == "graph-class":
-            cf_example = explainer.explain(task=dataset.task, num_epochs=num_epochs,
-                                           y_pred_orig=y_pred_orig)
+            expl, num_expl_inst = explainer.explain(task=dataset.task, num_epochs=num_epochs,
+                                                    y_pred_orig=y_pred_orig)
 
-        test_cf_examples.append(cf_example)
+        test_expls.append(expl)
 
-        # Check if cf example is not empty
-        if cf_example[0] != []:
-            num_cf_found += 1
+        # Count number of valid explanations generated
+        if num_expl_inst > 0:
+            num_expl_found += 1
 
         if verbose:
             time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
@@ -143,7 +146,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
 
     print("Total time elapsed: {:.4f} mins".format((time.time() - start)/60))
     # Includes also empty examples!
-    print("Number of CF examples found: {}/{}".format(num_cf_found, len(test_idx_list)))
+    print("Number of CF examples found: {}/{}".format(num_expl_found, len(test_idx_list)))
 
     # Build path and save CF examples in test set
     format_path = "../results/{}"
@@ -189,7 +192,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
             counter += 1
 
     with safe_open(dest_path, "wb") as f:
-        pickle.dump(test_cf_examples, f)
+        pickle.dump(test_expls, f)
 
 
 if __name__ == "__main__":
@@ -222,6 +225,8 @@ if __name__ == "__main__":
                         help='Activate CUDA support?')
     parser.add_argument('--no_rand_init', action='store_true', default=False,
                         help='Disable random initialisation of the P matrix')
+    parser.add_argument('--history', action='store_true', default=True,
+                        help='Store all the explanations generated during training?')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help='Activate verbose output?')
 

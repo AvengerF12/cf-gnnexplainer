@@ -17,9 +17,9 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
-                 n_hid, dropout, sub_labels, num_classes, beta, task, cem_mode=None,
+                 n_hid, dropout, sub_label, num_classes, beta, task, cem_mode=None,
                  edge_del=False, edge_add=False, bernoulli=False, delta=False, rand_init=True,
-                 device=None, verbose=False):
+                 history=False, device=None, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -31,7 +31,7 @@ class CFExplainer:
         self.sub_feat = sub_feat
         self.n_hid = n_hid
         self.dropout = dropout
-        self.sub_labels = sub_labels
+        self.sub_label = sub_label
         self.beta = beta
         self.task = task
         self.num_classes = num_classes
@@ -41,6 +41,7 @@ class CFExplainer:
         self.bernoulli = bernoulli
         self.delta = delta
         self.rand_init = rand_init
+        self.history = history
         self.device = device
         self.verbose = verbose
 
@@ -101,46 +102,55 @@ class CFExplainer:
             raise RuntimeError(error_str)
 
         # Check cf_adj
-        if expl_example != [] and 1 in torch.diagonal(expl_example[2], dim1=-2, dim2=-1):
+        if expl_example != [] and 1 in torch.diagonal(expl_example[0], dim1=-2, dim2=-1):
             raise RuntimeError("cf_explainer: cf_adj contains a self-connection. Invalid result.")
 
-        if expl_example != [] and torch.any(torch.greater(expl_example[2], 1)):
+        if expl_example != [] and torch.any(torch.greater(expl_example[0], 1)):
             raise RuntimeError("cf_explainer: cf_adj contains values > 1. Invalid result.")
 
-        if expl_example != [] and torch.any(torch.less(expl_example[2], 0)):
+        if expl_example != [] and torch.any(torch.less(expl_example[0], 0)):
             raise RuntimeError("cf_explainer: cf_adj contains values < 0. Invalid result.")
 
 
-    def explain(self, task, num_epochs, y_pred_orig, node_idx=None, new_idx=None):
+    def explain(self, task, num_epochs, y_pred_orig, node_idx=None, new_idx=None, debug=True):
 
         if task == "node-class" and (node_idx is None or new_idx is None):
             raise RuntimeError("cf_explainer/explain: invalid task")
 
-        best_cf_example = []
+        expl_list = []
         best_loss = np.inf
-        num_cf_examples = 0
+        num_expl = 0
 
         for epoch in range(num_epochs):
 
             if task == "node-class":
-                new_example, loss_total = self.train_expl(task, epoch, y_pred_orig,
-                                                          node_idx, new_idx)
+                new_expl, loss_total = self.train_expl(task, epoch, y_pred_orig,
+                                                       node_idx, new_idx)
             elif task == "graph-class":
-                new_example, loss_total = self.train_expl(task, epoch, y_pred_orig)
+                new_expl, loss_total = self.train_expl(task, epoch, y_pred_orig)
 
             if self.verbose:
                 print(loss_total, "(Current loss)")
                 print(best_loss, "(Best loss)")
 
-            if new_example != [] and loss_total < best_loss:
-                best_cf_example = new_example
+            # The best explanation is the last one
+            if new_expl != [] and loss_total < best_loss:
+                if self.history:
+                    expl_list.append(new_expl)
+                else:
+                    expl_list = [new_expl]
+
                 best_loss = loss_total
-                num_cf_examples += 1
+                num_expl += 1
 
-        with torch.no_grad():
-            self.debug_check_expl(best_cf_example)
+            if debug:
+                with torch.no_grad():
+                    self.debug_check_expl(new_expl)
 
-        return (best_cf_example, best_loss)
+        expl_res = [node_idx, new_idx, expl_list, self.sub_adj.cpu(), self.sub_feat.cpu(),
+                    self.sub_label.cpu(), y_pred_orig, self.num_nodes]
+
+        return expl_res, num_expl
 
 
     def train_expl(self, task, epoch, y_pred_orig, node_idx=None, new_idx=None):
@@ -150,13 +160,8 @@ class CFExplainer:
 
         if task == "node-class":
             # Need to use new_idx from now on since sub_adj is reindexed
-            y_pred_orig = y_pred_orig[new_idx]
             output = output[new_idx]
             output_actual = output_actual[new_idx]
-            sub_label = self.sub_labels[new_idx]
-
-        else:
-            sub_label = self.sub_labels
 
         y_pred_new = torch.argmax(output)
         y_pred_new_actual = torch.argmax(output_actual)
@@ -202,26 +207,13 @@ class CFExplainer:
 
         with torch.no_grad():
             # Note: when updating output format, also update checks
-            cf_stats = []
+            expl_inst = []
             cond_PP = self.cem_mode == "PP" and y_pred_new_actual == y_pred_orig
             # Needed to avoid including PP with different predictions
             cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
 
             if cond_PP or cond_cf:
-                if self.device == "cuda":
-                    cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze().cpu(),
-                                self.sub_adj.squeeze().cpu(),
-                                self.sub_feat.squeeze().cpu(),
-                                y_pred_orig, y_pred_new_actual,
-                                sub_label.squeeze().cpu(), self.num_nodes,
-                                loss_graph_dist.item()]
+                expl_inst = [cf_adj.detach().squeeze().cpu(), y_pred_new_actual.cpu(),
+                             loss_graph_dist.item()]
 
-                else:
-                    cf_stats = [node_idx, new_idx, cf_adj.detach().squeeze(),
-                                self.sub_adj.squeeze(),
-                                self.sub_feat.squeeze(),
-                                y_pred_orig, y_pred_new_actual,
-                                sub_label.squeeze(), self.num_nodes,
-                                loss_graph_dist.item()]
-
-        return(cf_stats, loss_total.item())
+        return(expl_inst, loss_total.item())
