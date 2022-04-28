@@ -17,8 +17,11 @@ import datasets
 
 default_path = "../results/"
 
-header = ["node_idx", "new_idx", "cf_adj", "sub_adj", "sub_feat", "y_pred_orig",
-          "y_pred_new_actual", "label", "num_nodes", "loss_graph_dist"]
+header_data = ["node_idx", "new_idx", "expl_list", "sub_adj", "sub_feat", "label", "y_pred_orig",
+               "num_nodes"]
+# Structure of single element in expl_list
+header_expl = ["cf_adj", "y_pred_new_actual", "loss_graph_dist"]
+
 hidden = 20
 dropout = 0.0
 
@@ -44,7 +47,7 @@ def compute_edge_based_accuracy(df_motif, edge_index, features, labels, dict_ypr
             raise RuntimeError("Error in node mapping")
 
         orig_adj = df_motif["sub_adj"][i]
-        cf_adj = df_motif["cf_adj"][i]
+        cf_adj = df_motif["expl_list"][i][-1][0]
 
         pert_del_edges = orig_adj - cf_adj
         pert_del_edges[pert_del_edges == -1] = 0
@@ -142,7 +145,7 @@ def compute_node_based_accuracy(df_motif, edge_index, features, labels, dict_ypr
             raise RuntimeError("Error in node mapping")
 
         orig_adj = df_motif["sub_adj"][i]
-        cf_adj = df_motif["cf_adj"][i]
+        cf_adj = df_motif["expl_list"][i][-1][0]
 
         pert_del_edges = orig_adj - cf_adj
         pert_del_edges[pert_del_edges == -1] = 0
@@ -254,17 +257,18 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
 
     for expl in expl_list:
         # Ignore elements for which generating an explanation wasn't possible
-        if expl[0] == []:
+        if expl[2] == []:
             continue
 
-        df_prep.append(expl[0])
+        df_prep.append(expl)
 
+    # Note: the metrics are applied only to the last (best in terms of loss) explanation
     num_valid_expl = len(df_prep)
-    expl_df = pd.DataFrame(df_prep, columns=header)
+    expl_df = pd.DataFrame(df_prep, columns=header_data)
 
     # Add num edges for each generated explanation
     expl_df["num_edges_adj"] = expl_df["sub_adj"].transform(lambda x: torch.sum(x)/2)
-    expl_df["num_edges_expl"] = expl_df["cf_adj"].transform(lambda x: torch.sum(x)/2)
+    expl_df["num_edges_expl"] = expl_df["expl_list"].transform(lambda x: torch.sum(x[-1][0])/2)
 
     if accuracy_bool and "syn" in dataset_id:
         # Compute different accuracy metrics only for synthetic datasets
@@ -277,6 +281,8 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
         # PN and counterfactual case
         fidelity = 1 - num_valid_expl / num_tot_expl
 
+    # Number of changes in best explanation
+    expl_df["loss_graph_dist"] = expl_df["expl_list"].transform(lambda x: x[-1][2])
     avg_graph_dist = np.mean(expl_df["loss_graph_dist"])
     std_graph_dist = np.std(expl_df["loss_graph_dist"])
 
@@ -323,6 +329,7 @@ def evaluate_path_content(res_path):
 
     for dataset in dataset_list:
 
+        # Load synthetic datasets
         with open("../data/gnn_explainer/{}.pickle".format(dataset), "rb") as f:
             dataset_dict[dataset] = pickle.load(f)
 
@@ -330,7 +337,7 @@ def evaluate_path_content(res_path):
         for file in files:
             path = os.path.join(subdir, file)
 
-            # Skip irrelevant path
+            # Skip irrelevant files
             if ".ipynb" in path or ".txt" in path or ".csv" in path:
                 continue
 
@@ -349,9 +356,9 @@ def evaluate_path_content(res_path):
                 expl_task = "CF"
 
             with open(path, "rb") as f:
-                generated_expl = pickle.load(f)
+                generated_expls = pickle.load(f)
 
-            res = evaluate(generated_expl, dataset_id, dataset_name, dataset_dict[dataset_id],
+            res = evaluate(generated_expls, dataset_id, dataset_name, dataset_dict[dataset_id],
                            expl_task)
             res["path"] = path
 
