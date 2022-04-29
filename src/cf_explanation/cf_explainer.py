@@ -152,15 +152,15 @@ class CFExplainer:
                 else:
                     expl_list = [new_expl]
 
+                # Note: history cannot be false if gamma is greater than 0, otherwise error
                 if self.gamma > 0:
-                    diff_adj_list.append(cf_adj_diff)
+                    diff_adj_list = [cf_adj_diff]
 
                 best_loss = loss_total
                 num_expl += 1
 
             if debug:
-                with torch.no_grad():
-                    self.debug_check_expl(new_expl)
+                self.debug_check_expl(new_expl)
 
         expl_res = [node_idx, new_idx, expl_list, self.sub_adj.cpu(), self.sub_feat.cpu(),
                     self.sub_label.cpu(), y_pred_orig, self.num_nodes]
@@ -229,7 +229,7 @@ class CFExplainer:
         cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
 
         if cond_PP or cond_cf:
-            expl_inst = [cf_adj_actual.detach().squeeze().cpu(), y_pred_new_actual.cpu(),
-                         loss_graph_dist.item()]
+            expl_inst = [cf_adj_actual.detach().squeeze().cpu(), y_pred_new_actual.detach().cpu(),
+                         loss_graph_dist.detach().item()]
 
-        return(expl_inst, cf_adj_diff.detach(), loss_total.item())
+        return(expl_inst, cf_adj_diff.detach(), loss_total.detach().item())
