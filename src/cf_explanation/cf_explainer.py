@@ -3,6 +3,7 @@ import math
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
@@ -17,9 +18,9 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
-                 n_hid, dropout, sub_label, num_classes, beta, task, cem_mode=None,
-                 edge_del=False, edge_add=False, bernoulli=False, delta=False, rand_init=True,
-                 history=False, device=None, verbose=False):
+                 n_hid, dropout, sub_label, num_classes, alpha, beta, gamma, task,
+                 cem_mode=None, edge_del=False, edge_add=False, bernoulli=False, delta=False,
+                 rand_init=True, history=False, device=None, verbose=False):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -32,7 +33,9 @@ class CFExplainer:
         self.n_hid = n_hid
         self.dropout = dropout
         self.sub_label = sub_label
+        self.alpha = alpha
         self.beta = beta
+        self.gamma = gamma
         self.task = task
         self.num_classes = num_classes
         self.cem_mode = cem_mode
@@ -50,18 +53,23 @@ class CFExplainer:
         if self.cem_mode is None and not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
+        if self.gamma > 0 and not self.history:
+            raise RuntimeError("CFExplainer: gamma requires the history to be enabled")
+
         # Instantiate CF model class, load weights from original model
         if self.cem_mode == "PN" or self.cem_mode == "PP":
-            self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes,
-                                                   self.sub_adj, num_nodes, beta,
-                                                   mode=self.cem_mode, rand_init=self.rand_init,
+            self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes, self.sub_adj,
+                                                   num_nodes, self.alpha, self.beta, self.gamma,
+                                                   mode=self.cem_mode,
+                                                   rand_init=self.rand_init,
                                                    device=self.device, task=self.task)
 
         elif self.cem_mode is None:
 
             if self.delta:
                 self.cf_model = GCNSyntheticPerturbDelta(self.model, self.num_classes,
-                                                         self.sub_adj, num_nodes, self.beta,
+                                                         self.sub_adj, num_nodes, self.alpha,
+                                                         self.beta, self.gamma,
                                                          edge_del=self.edge_del,
                                                          edge_add=self.edge_add,
                                                          bernoulli=self.bernoulli,
@@ -69,7 +77,8 @@ class CFExplainer:
                                                          device=self.device, task=self.task)
             else:
                 self.cf_model = GCNSyntheticPerturbOrig(self.model, self.num_classes,
-                                                        self.sub_adj, num_nodes, beta,
+                                                        self.sub_adj, num_nodes, self.alpha,
+                                                        self.beta, self.gamma,
                                                         edge_del=self.edge_del,
                                                         edge_add=self.edge_add,
                                                         bernoulli=self.bernoulli,
@@ -118,16 +127,19 @@ class CFExplainer:
             raise RuntimeError("cf_explainer/explain: invalid task")
 
         expl_list = []
+        diff_adj_list = []
         best_loss = np.inf
         num_expl = 0
 
         for epoch in range(num_epochs):
 
             if task == "node-class":
-                new_expl, loss_total = self.train_expl(task, epoch, y_pred_orig,
-                                                       node_idx, new_idx)
+                new_expl, cf_adj_diff, loss_total = self.train_expl(task, epoch, y_pred_orig,
+                                                                    diff_adj_list, node_idx,
+                                                                    new_idx)
             elif task == "graph-class":
-                new_expl, loss_total = self.train_expl(task, epoch, y_pred_orig)
+                new_expl, cf_adj_diff, loss_total = self.train_expl(task, epoch, y_pred_orig,
+                                                                    diff_adj_list)
 
             if self.verbose:
                 print(loss_total, "(Current loss)")
@@ -139,6 +151,9 @@ class CFExplainer:
                     expl_list.append(new_expl)
                 else:
                     expl_list = [new_expl]
+
+                if self.gamma > 0:
+                    diff_adj_list.append(cf_adj_diff)
 
                 best_loss = loss_total
                 num_expl += 1
@@ -153,7 +168,7 @@ class CFExplainer:
         return expl_res, num_expl
 
 
-    def train_expl(self, task, epoch, y_pred_orig, node_idx=None, new_idx=None):
+    def train_expl(self, task, epoch, y_pred_orig, prev_adj_list, node_idx=None, new_idx=None):
         self.cf_optimizer.zero_grad()
 
         output, output_actual = self.cf_model.forward(self.sub_feat)
@@ -166,25 +181,26 @@ class CFExplainer:
         y_pred_new = torch.argmax(output)
         y_pred_new_actual = torch.argmax(output_actual)
 
-        # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
         if self.cem_mode == "PN":
 
-            loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                self.cf_model.loss_PN(output, y_pred_orig, y_pred_new_actual)
+            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+                self.cf_model.loss_PN(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
 
         elif self.cem_mode == "PP":
 
-            loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                self.cf_model.loss_PP(output, y_pred_orig, y_pred_new_actual)
+            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+                self.cf_model.loss_PP(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
 
         elif self.cem_mode is None:
 
             if self.bernoulli:
-                loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                    self.cf_model.loss_bernoulli(output, y_pred_orig, y_pred_new_actual)
+                loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+                    self.cf_model.loss_bernoulli(output, y_pred_orig, y_pred_new_actual,
+                                                 prev_adj_list)
             else:
-                loss_total, loss_pred, loss_graph_dist, cf_adj = \
-                    self.cf_model.loss_std(output, y_pred_orig, y_pred_new_actual)
+                # loss_pred indicator function should be based on y_pred_new_actual NOT y_pred_new
+                loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+                    self.cf_model.loss_std(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
         else:
             raise RuntimeError("cf_explainer/train: the specified mode for CEM is invalid")
 
@@ -195,9 +211,10 @@ class CFExplainer:
         if self.verbose:
             print('Epoch: {:04d}'.format(epoch + 1),
                   'loss: {:.4f}'.format(loss_total.item()),
-                  'pred loss: {:.4f}'.format(loss_pred.item()),
                   'graph loss: {:.4f}'.format(loss_graph_dist.item()),
-                  'beta: {},'.format(self.beta))
+                  'alpha (pred coeff): {},'.format(self.alpha),
+                  'beta (dist coeff): {},'.format(self.beta),
+                  'gamma (diverse expl coeff): {},'.format(self.gamma))
             print('Output: {}\n'.format(output.data),
                   'Output nondiff: {}\n'.format(output_actual.data),
                   'orig pred: {}, '.format(y_pred_orig),
@@ -205,15 +222,14 @@ class CFExplainer:
                   'new pred nondiff: {}'.format(y_pred_new_actual))
             print(" ")
 
-        with torch.no_grad():
-            # Note: when updating output format, also update checks
-            expl_inst = []
-            cond_PP = self.cem_mode == "PP" and y_pred_new_actual == y_pred_orig
-            # Needed to avoid including PP with different predictions
-            cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
+        # Note: when updating output format, also update checks
+        expl_inst = []
+        cond_PP = self.cem_mode == "PP" and y_pred_new_actual == y_pred_orig
+        # Needed to avoid including PP with different predictions
+        cond_cf = self.cem_mode != "PP" and y_pred_new_actual != y_pred_orig
 
-            if cond_PP or cond_cf:
-                expl_inst = [cf_adj.detach().squeeze().cpu(), y_pred_new_actual.cpu(),
-                             loss_graph_dist.item()]
+        if cond_PP or cond_cf:
+            expl_inst = [cf_adj_actual.detach().squeeze().cpu(), y_pred_new_actual.cpu(),
+                         loss_graph_dist.item()]
 
-        return(expl_inst, loss_total.item())
+        return(expl_inst, cf_adj_diff.detach(), loss_total.item())

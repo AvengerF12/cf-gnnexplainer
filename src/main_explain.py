@@ -16,9 +16,9 @@ import datasets
 
 
 def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
-                 optimizer="SGD", n_momentum=0, beta=0.5, num_epochs=500, cem_mode=None,
-                 edge_del=False, edge_add=False, delta=False, bernoulli=False, cuda=False,
-                 rand_init=True, verbose=False):
+                 optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
+                 cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
+                 cuda=False, rand_init=True, verbose=False):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -109,7 +109,9 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 dropout=dropout_r,
                                 sub_label=sub_label,
                                 num_classes=dataset.n_classes,
+                                alpha=alpha,
                                 beta=beta,
+                                gamma=gamma,
                                 task=dataset.task,
                                 cem_mode=cem_mode,
                                 edge_del=edge_del,
@@ -175,12 +177,13 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     else:
         format_path += "_" + cem_mode + "/"
 
-    format_path += "{}/cf_examples_lr{}_beta{}_mom{}_epochs{}"
+    format_path += "{}/cf_examples_lr{}_alpha{}_beta{}_gamma{}_mom{}_epochs{}"
 
     if rand_init:
         format_path += "_rand"
 
-    dest_path = format_path.format(dataset_id, optimizer, lr, beta, n_momentum, num_epochs)
+    dest_path = format_path.format(dataset_id, optimizer, lr, alpha, beta, gamma,
+                                   n_momentum, num_epochs)
 
     counter = 0
     # If a random init already exists, don't overwrite and create a new file
@@ -210,7 +213,9 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.005, help='Learning rate for explainer')
     parser.add_argument('--optimizer', type=str, default="SGD", help='SGD or Adadelta')
     parser.add_argument('--n_momentum', type=float, default=0.0, help='Nesterov momentum')
+    parser.add_argument('--alpha', type=float, default=1, help='Tradeoff for prediction loss')
     parser.add_argument('--beta', type=float, default=0.5, help='Tradeoff for dist loss')
+    parser.add_argument('--gamma', type=float, default=0, help='Tradeoff for diversity loss')
     parser.add_argument('--num_epochs', type=int, default=500, help='Num epochs for explainer')
     parser.add_argument('--cem_mode', type=str, default=None, help='PP/PN contrastive explanation')
     parser.add_argument('--edge_add', action='store_true', default=False,
@@ -233,6 +238,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
-                 args.optimizer, args.n_momentum, args.beta, args.num_epochs, args.cem_mode,
-                 args.edge_del, args.edge_add, args.delta, args.bernoulli, args.cuda,
-                 not args.no_rand_init, args.verbose)
+                 args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
+                 args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
+                 args.bernoulli, args.cuda, not args.no_rand_init, args.verbose)

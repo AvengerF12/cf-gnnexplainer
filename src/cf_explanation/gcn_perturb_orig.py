@@ -11,14 +11,16 @@ class GCNSyntheticPerturbOrig(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, model, nclass, adj, num_nodes, beta, task,
+    def __init__(self, model, nclass, adj, num_nodes, alpha, beta, gamma, task,
                  edge_del=False, edge_add=False, bernoulli=False, rand_init=True, device=None):
         super(GCNSyntheticPerturbOrig, self).__init__()
         self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
+        self.alpha = alpha
         self.beta = beta
+        self.gamma = gamma
         self.bernoulli = bernoulli
 
         # Used to find the appropriate part of P to perturbate (w/o padding) and compute flattened
@@ -117,7 +119,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         return output, output
 
 
-    def loss_std(self, output, y_pred_orig, y_pred_new_actual):
+    def loss_std(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = torch.sigmoid(self.P_tril)
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
@@ -125,10 +127,10 @@ class GCNSyntheticPerturbOrig(nn.Module):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         if self.edge_add:
-            cf_adj = P_hat_symm
+            cf_adj_diff = P_hat_symm
             cf_adj_actual = P
         else:
-            cf_adj = P_hat_symm * self.adj
+            cf_adj_diff = P_hat_symm * self.adj
             cf_adj_actual = P * self.adj
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
@@ -136,19 +138,25 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # Number of edges changed (symmetrical), used for the metrics
         loss_graph_dist_actual = torch.sum(torch.abs(cf_adj_actual - self.adj)) / 2
         # Relaxation to continuous space of loss_graph_dist_actual, used for the loss
-        loss_graph_dist = torch.sum(torch.abs(cf_adj - self.adj)) / 2
+        loss_graph_dist = torch.sum(torch.abs(cf_adj_diff - self.adj)) / 2
+
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj_diff, expl)
 
         # Zero-out loss_pred with pred_same if prediction flips
-        # Note: the distance loss is non-differentiable => it's not optimized directly.
+        # Note: the distance loss in the original paper is non-differentiable => 
+        #   it's not optimized directly.
         # It only comes into play when comparing the current loss with best loss in cf_explainer
         # The results obtained using the hyperparameters on the original paper are identical
         # w/wo the dist loss.
-        loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
+        loss_total = self.alpha * pred_same * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
 
-        return loss_total, loss_pred, loss_graph_dist_actual, cf_adj_actual
+        return loss_total, loss_graph_dist_actual, cf_adj_diff, cf_adj_actual
 
 
-    def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual):
+    def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
@@ -165,7 +173,12 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # Number of edges changed (symmetrical)
         loss_graph_dist = torch.sum(torch.abs(cf_adj - self.adj)) / 2
 
-        # Zero-out loss_pred with pred_same if prediction flips
-        loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj, expl)
 
-        return loss_total, loss_pred, loss_graph_dist, cf_adj
+        # Zero-out loss_pred with pred_same if prediction flips
+        loss_total = self.alpha * pred_same * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
+
+        return loss_total, loss_graph_dist, cf_adj, cf_adj

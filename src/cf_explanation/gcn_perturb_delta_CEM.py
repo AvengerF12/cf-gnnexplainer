@@ -17,15 +17,17 @@ class GCNSyntheticPerturbCEM(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
-    def __init__(self, model, nclass, adj, num_nodes, beta, task, mode="PN", rand_init=True,
-                 device=None):
+    def __init__(self, model, nclass, adj, num_nodes, alpha, beta, gamma, task, mode="PN",
+                 rand_init=True, device=None):
 
         super(GCNSyntheticPerturbCEM, self).__init__()
         self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
         self.adj = adj
         self.nclass = nclass
+        self.alpha = alpha
         self.beta = beta
+        self.gamma = gamma
         self.BML = BernoulliMLSample.apply
 
         # Used to find the appropriate part of P to perturbate (w/o padding) and compute flattened
@@ -93,7 +95,7 @@ class GCNSyntheticPerturbCEM(nn.Module):
         return output
 
 
-    def loss_PN(self, output, y_pred_orig, y_pred_new_actual):
+    def loss_PN(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
@@ -108,15 +110,20 @@ class GCNSyntheticPerturbCEM(nn.Module):
         # Number of edges changed (symmetrical)
         loss_graph_dist = torch.sum(torch.abs(delta)) / 2
 
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj, expl)
+
         # Zero-out loss_pred with pred_same if prediction flips
-        loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
+        loss_total = self.alpha * pred_same * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
 
         # In this case it could be handy to return the delta directly instead of cf_adj,
         # in any case it is easy to find the delta given cf_adj and sub_adj
-        return loss_total, loss_pred, loss_graph_dist, cf_adj
+        return loss_total, loss_graph_dist, cf_adj, cf_adj
 
 
-    def loss_PP(self, output, y_pred_orig, y_pred_new_actual):
+    def loss_PP(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
@@ -138,7 +145,12 @@ class GCNSyntheticPerturbCEM(nn.Module):
         # generated
         loss_graph_dist_actual = torch.sum(torch.abs(delta)) / 2
 
-        # Zero-out loss_pred with pred_same if prediction flips
-        loss_total = pred_diff * loss_pred + self.beta * loss_graph_dist
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj, expl)
 
-        return loss_total, loss_pred, loss_graph_dist_actual, cf_adj
+        # Zero-out loss_pred with pred_same if prediction flips
+        loss_total = self.alpha * pred_diff * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
+
+        return loss_total, loss_graph_dist_actual, cf_adj, cf_adj
