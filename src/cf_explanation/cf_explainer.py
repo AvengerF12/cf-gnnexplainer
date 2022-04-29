@@ -20,7 +20,7 @@ class CFExplainer:
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
                  n_hid, dropout, sub_label, num_classes, alpha, beta, gamma, task,
                  cem_mode=None, edge_del=False, edge_add=False, bernoulli=False, delta=False,
-                 rand_init=True, history=False, device=None, verbose=False):
+                 rand_init=True, history=False, device=None, verbosity=0):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -46,7 +46,7 @@ class CFExplainer:
         self.rand_init = rand_init
         self.history = history
         self.device = device
-        self.verbose = verbose
+        self.verbosity = verbosity
 
         self.model.eval()
 
@@ -87,7 +87,7 @@ class CFExplainer:
         else:
             raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
 
-        if self.verbose:
+        if self.verbosity > 1:
             for name, param in self.model.named_parameters():
                 print("orig model requires_grad: ", name, param.requires_grad)
             for name, param in self.cf_model.named_parameters():
@@ -141,7 +141,7 @@ class CFExplainer:
                 new_expl, cf_adj_diff, loss_total = self.train_expl(task, epoch, y_pred_orig,
                                                                     diff_adj_list)
 
-            if self.verbose:
+            if self.verbosity > 1:
                 print(loss_total, "(Current loss)")
                 print(best_loss, "(Best loss)")
 
@@ -208,7 +208,7 @@ class CFExplainer:
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
 
-        if self.verbose:
+        if self.verbosity > 1:
             print('Epoch: {:04d}'.format(epoch + 1),
                   'loss: {:.4f}'.format(loss_total.item()),
                   'graph loss: {:.4f}'.format(loss_graph_dist.item()),

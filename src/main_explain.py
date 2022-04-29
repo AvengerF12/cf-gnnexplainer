@@ -18,7 +18,7 @@ import datasets
 def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
                  cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
-                 cuda=False, rand_init=True, verbose=False):
+                 cuda=False, rand_init=True, verbosity=0):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -72,14 +72,14 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     _, test_idx_list = dataset.split_tr_ts_idx()
     num_expl_found = 0
 
-    for i in test_idx_list:
+    for i, v  in enumerate(test_idx_list):
 
         if dataset.task == "node-class":
-            sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes = dataset[i]
+            sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes = dataset[v]
             sub_label = sub_labels[new_idx]
 
         elif dataset.task == "graph-class":
-            sub_adj, sub_feat, sub_label, num_nodes = dataset[i]
+            sub_adj, sub_feat, sub_label, num_nodes = dataset[v]
 
         with torch.no_grad():
             output = model(sub_feat, sub_adj.expand(1, -1, -1)).squeeze()
@@ -121,7 +121,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 rand_init=rand_init,
                                 history=args.history,
                                 device=device,
-                                verbose=verbose)
+                                verbosity=verbosity)
 
         if cuda:
             explainer.cf_model.cuda()
@@ -141,9 +141,9 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         if num_expl_inst > 0:
             num_expl_found += 1
 
-        if verbose:
+        if verbosity > 0:
             time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
-            print(time_frmt_str.format(num_epochs, i+1, len(test_idx_list),
+            print(time_frmt_str.format(num_epochs, i + 1, len(test_idx_list),
                                        (time.time() - start)/60))
 
     print("Total time elapsed: {:.4f} mins".format((time.time() - start)/60))
@@ -232,12 +232,12 @@ if __name__ == "__main__":
                         help='Disable random initialisation of the P matrix')
     parser.add_argument('--history', action='store_true', default=True,
                         help='Store all the explanations generated during training?')
-    parser.add_argument('--verbose', action='store_true', default=False,
-                        help='Activate verbose output?')
+    parser.add_argument('--verbosity', type=int, default=0,
+                        help='Level of output verbosity (0, 1, 2)')
 
     args = parser.parse_args()
 
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
                  args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
-                 args.bernoulli, args.cuda, not args.no_rand_init, args.verbose)
+                 args.bernoulli, args.cuda, not args.no_rand_init, args.verbosity)
