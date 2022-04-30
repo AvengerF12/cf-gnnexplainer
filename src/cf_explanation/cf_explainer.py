@@ -20,7 +20,7 @@ class CFExplainer:
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
                  n_hid, dropout, sub_label, num_classes, alpha, beta, gamma, task,
                  cem_mode=None, edge_del=False, edge_add=False, bernoulli=False, delta=False,
-                 rand_init=True, history=False, div_hind=5, device=None, verbosity=0):
+                 rand_init=True, history=True, hist_len=10, div_hind=5, device=None, verbosity=0):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -45,6 +45,7 @@ class CFExplainer:
         self.delta = delta
         self.rand_init = rand_init
         self.history = history
+        self.hist_len = hist_len
         self.div_hind = div_hind
         self.device = device
         self.verbosity = verbosity
@@ -166,6 +167,11 @@ class CFExplainer:
 
             if debug:
                 self.debug_check_expl(new_expl)
+
+        # Reduce the history size if needed
+        if self.history and num_expl > self.hist_len:
+            idx_list = np.linspace(0, num_expl-1, self.hist_len, dtype=int)
+            expl_list = [expl_list[i] for i in idx_list]
 
         expl_res = [node_idx, new_idx, expl_list, self.sub_adj.cpu(), self.sub_feat.cpu(),
                     self.sub_label.cpu(), y_pred_orig, self.num_nodes]
