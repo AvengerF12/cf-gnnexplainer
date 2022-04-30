@@ -20,7 +20,7 @@ class CFExplainer:
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
                  n_hid, dropout, sub_label, num_classes, alpha, beta, gamma, task,
                  cem_mode=None, edge_del=False, edge_add=False, bernoulli=False, delta=False,
-                 rand_init=True, history=False, device=None, verbosity=0):
+                 rand_init=True, history=False, div_hind=5, device=None, verbosity=0):
 
         super(CFExplainer, self).__init__()
         self.model = model
@@ -45,6 +45,7 @@ class CFExplainer:
         self.delta = delta
         self.rand_init = rand_init
         self.history = history
+        self.div_hind = div_hind
         self.device = device
         self.verbosity = verbosity
 
@@ -161,7 +162,8 @@ class CFExplainer:
 
                 # Note: history cannot be false if gamma is greater than 0, otherwise error
                 if self.gamma > 0:
-                    diff_adj_list = [cf_adj_diff]
+                    diff_adj_list.append(cf_adj_diff)
+                    diff_adj_list = diff_adj_list[-self.div_hind:]
 
                 best_loss = loss_graph_dist
                 num_expl += 1

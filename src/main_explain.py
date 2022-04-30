@@ -18,7 +18,7 @@ import datasets
 def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
                  cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
-                 cuda=False, rand_init=True, history=True, verbosity=0):
+                 cuda=False, rand_init=True, history=True, div_hind=5, verbosity=0):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -120,6 +120,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
                                 bernoulli=bernoulli,
                                 rand_init=rand_init,
                                 history=history,
+                                div_hind=div_hind,
                                 device=device,
                                 verbosity=verbosity)
 
@@ -232,6 +233,8 @@ if __name__ == "__main__":
                         help='Disable random initialisation of the P matrix')
     parser.add_argument('--history', action='store_true', default=True,
                         help='Store all the explanations generated during training?')
+    parser.add_argument('--div_hind', type=int, default=5,
+                        help='How many previous explanations to include when using diversity loss')
     parser.add_argument('--verbosity', type=int, default=0,
                         help='Level of output verbosity (0, 1, 2)')
 
@@ -240,4 +243,5 @@ if __name__ == "__main__":
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
                  args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
-                 args.bernoulli, args.cuda, not args.no_rand_init, args.history, args.verbosity)
+                 args.bernoulli, args.cuda, not args.no_rand_init, args.history, args.div_hind,
+                 args.verbosity)
