@@ -134,19 +134,26 @@ class CFExplainer:
         for epoch in range(num_epochs):
 
             if task == "node-class":
-                new_expl, cf_adj_diff, loss_total = self.train_expl(task, epoch, y_pred_orig,
-                                                                    diff_adj_list, node_idx,
-                                                                    new_idx)
+                new_expl, cf_adj_diff, loss_graph_dist = self.train_expl(task, epoch, y_pred_orig,
+                                                                         diff_adj_list, node_idx,
+                                                                         new_idx)
             elif task == "graph-class":
-                new_expl, cf_adj_diff, loss_total = self.train_expl(task, epoch, y_pred_orig,
-                                                                    diff_adj_list)
+                new_expl, cf_adj_diff, loss_graph_dist = self.train_expl(task, epoch, y_pred_orig,
+                                                                         diff_adj_list)
 
             if self.verbosity > 1:
-                print(loss_total, "(Current loss)")
-                print(best_loss, "(Best loss)")
+                print(loss_graph_dist, "(Current graph distance loss)")
+                print(best_loss, "(Best distance loss)")
 
-            # The best explanation is the last one
-            if new_expl != [] and loss_total < best_loss:
+            if new_expl == []:
+                continue
+
+            # For PP, save every valid explanation generated
+            cond_PP = self.cem_mode == "PP"
+            # Else, save only explanations that are as good or better as the best ones
+            cond_CF = loss_graph_dist <= best_loss
+
+            if cond_PP or cond_CF:
                 if self.history:
                     expl_list.append(new_expl)
                 else:
@@ -156,7 +163,7 @@ class CFExplainer:
                 if self.gamma > 0:
                     diff_adj_list = [cf_adj_diff]
 
-                best_loss = loss_total
+                best_loss = loss_graph_dist
                 num_expl += 1
 
             if debug:
@@ -232,4 +239,4 @@ class CFExplainer:
             expl_inst = [cf_adj_actual.detach().squeeze().cpu(), y_pred_new_actual.detach().cpu(),
                          loss_graph_dist.detach().item()]
 
-        return(expl_inst, cf_adj_diff.detach(), loss_total.detach().item())
+        return(expl_inst, cf_adj_diff.detach(), loss_graph_dist.detach().item())
