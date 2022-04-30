@@ -54,9 +54,6 @@ class CFExplainer:
         if self.cem_mode is None and not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
-        if self.gamma > 0 and not self.history:
-            raise RuntimeError("CFExplainer: gamma requires the history to be enabled")
-
         # Instantiate CF model class, load weights from original model
         if self.cem_mode == "PN" or self.cem_mode == "PP":
             self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes, self.sub_adj,
@@ -160,7 +157,6 @@ class CFExplainer:
                 else:
                     expl_list = [new_expl]
 
-                # Note: history cannot be false if gamma is greater than 0, otherwise error
                 if self.gamma > 0:
                     diff_adj_list.append(cf_adj_diff)
                     diff_adj_list = diff_adj_list[-self.div_hind:]
