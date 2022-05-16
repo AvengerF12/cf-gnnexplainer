@@ -55,6 +55,9 @@ class CFExplainer:
         if self.cem_mode is None and not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
 
+        if self.gamma > 0 and not self.history:
+            raise RuntimeError("CFExplainer: enable history to generate diverse explanations")
+
         # Instantiate CF model class, load weights from original model
         if self.cem_mode == "PN" or self.cem_mode == "PP":
             self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes, self.sub_adj,
@@ -125,20 +128,21 @@ class CFExplainer:
         if task == "node-class" and (node_idx is None or new_idx is None):
             raise RuntimeError("cf_explainer/explain: invalid task")
 
-        expl_list = []
-        diff_adj_list = []
+        hist_list = []
+        # The adj in this list are differentiable
+        diverse_adj_list = []
+
         best_loss = np.inf
-        num_expl = 0
 
         for epoch in range(num_epochs):
 
             if task == "node-class":
                 new_expl, cf_adj_diff, loss_graph_dist = self.train_expl(task, epoch, y_pred_orig,
-                                                                         diff_adj_list, node_idx,
+                                                                         diverse_adj_list, node_idx,
                                                                          new_idx)
             elif task == "graph-class":
                 new_expl, cf_adj_diff, loss_graph_dist = self.train_expl(task, epoch, y_pred_orig,
-                                                                         diff_adj_list)
+                                                                         diverse_adj_list)
 
             if self.verbosity > 1:
                 print(loss_graph_dist, "(Current graph distance loss)")
@@ -153,25 +157,45 @@ class CFExplainer:
             cond_CF = loss_graph_dist <= best_loss
 
             if cond_PP or cond_CF:
-                if self.history:
-                    expl_list.append(new_expl)
-                else:
-                    expl_list = [new_expl]
+                # Check if history is enabled
+                if not self.history:
+                    hist_list = [new_expl]
 
                 if self.gamma > 0:
-                    diff_adj_list.append(cf_adj_diff)
-                    diff_adj_list = diff_adj_list[-self.div_hind:]
+
+                    in_list = False
+
+                    # Check if non-diff adj has already been included in the part of the
+                    # history taken into account by the diversity loss
+                    for expl in hist_list[-self.div_hind:]:
+                        if torch.equal(expl[0], new_expl[0]):
+                            in_list = True
+                            break
+
+                    if not in_list:
+                        diverse_adj_list.append(cf_adj_diff)
+                        hist_list.append(new_expl)
+
+                        # Keep only the last div_hind explanation to reduce computational cost
+                        diverse_adj_list = diverse_adj_list[-self.div_hind:]
+
+                # Gamma disabled
+                else:
+                    hist_list.append(new_expl)
 
                 best_loss = loss_graph_dist
-                num_expl += 1
 
             if debug:
                 self.debug_check_expl(new_expl)
 
+        num_expl = len(hist_list)
+
         # Reduce the history size if needed
         if self.history and num_expl > self.hist_len:
             idx_list = np.linspace(0, num_expl-1, self.hist_len, dtype=int)
-            expl_list = [expl_list[i] for i in idx_list]
+            expl_list = [hist_list[i] for i in idx_list]
+        else:
+            expl_list = hist_list
 
         expl_res = [node_idx, new_idx, expl_list, self.sub_adj.cpu(), self.sub_feat.cpu(),
                     self.sub_label.cpu(), y_pred_orig, self.num_nodes]

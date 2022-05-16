@@ -232,7 +232,7 @@ if __name__ == "__main__":
                         help='Activate CUDA support?')
     parser.add_argument('--no_rand_init', action='store_true', default=False,
                         help='Disable random initialisation of the P matrix')
-    parser.add_argument('--history', action='store_true', default=True,
+    parser.add_argument('--no_history', action='store_true', default=False,
                         help='Store all the explanations generated during training?')
     parser.add_argument('--hist_len', type=int, default=10,
                         help='How long is the history kept for each explanation? ' + \
@@ -248,5 +248,5 @@ if __name__ == "__main__":
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
                  args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
-                 args.bernoulli, args.cuda, not args.no_rand_init, args.history, args.hist_len,
+                 args.bernoulli, args.cuda, not args.no_rand_init, not args.no_history, args.hist_len,
                  args.div_hind, args.verbosity)
