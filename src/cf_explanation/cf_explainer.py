@@ -228,14 +228,8 @@ class CFExplainer:
 
         elif self.cem_mode is None:
 
-            if self.bernoulli:
-                loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
-                    self.cf_model.loss_bernoulli(output, y_pred_orig, y_pred_new_actual,
-                                                 prev_adj_list)
-            else:
-                # loss_pred indicator function should be based on y_pred_new_actual NOT y_pred_new
-                loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
-                    self.cf_model.loss_std(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
+            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+                self.cf_model.loss(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
         else:
             raise RuntimeError("cf_explainer/train: the specified mode for CEM is invalid")
 

@@ -119,7 +119,16 @@ class GCNSyntheticPerturbOrig(nn.Module):
         return output, output
 
 
-    def loss_std(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
+    def loss(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
+
+        if self.bernoulli:
+            res = self.__loss_bernoulli(output, y_pred_orig, y_pred_new_actual, prev_expls)
+        else:
+            res = self.__loss_std(output, y_pred_orig, y_pred_new_actual, prev_expls)
+
+        return res
+
+    def __loss_std(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = torch.sigmoid(self.P_tril)
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
@@ -156,7 +165,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         return loss_total, loss_graph_dist_actual, cf_adj_diff, cf_adj_actual
 
 
-    def loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
+    def __loss_bernoulli(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
         P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
         P = self.BML(P_hat_symm)  # Threshold P_hat
 
