@@ -10,7 +10,6 @@ from torch.nn.utils import clip_grad_norm_
 from utils.utils import get_degree_matrix
 from .gcn_perturb_orig import GCNSyntheticPerturbOrig
 from .gcn_perturb_delta import GCNSyntheticPerturbDelta
-from .gcn_perturb_delta_CEM import GCNSyntheticPerturbCEM
 
 
 class CFExplainer:
@@ -58,36 +57,34 @@ class CFExplainer:
         if self.gamma > 0 and not self.history:
             raise RuntimeError("CFExplainer: enable history to generate diverse explanations")
 
-        # Instantiate CF model class, load weights from original model
-        if self.cem_mode == "PN" or self.cem_mode == "PP":
-            self.cf_model = GCNSyntheticPerturbCEM(self.model, self.num_classes, self.sub_adj,
-                                                   num_nodes, self.alpha, self.beta, self.gamma,
-                                                   mode=self.cem_mode,
-                                                   rand_init=self.rand_init,
-                                                   device=self.device, task=self.task)
-
-        elif self.cem_mode is None:
-
-            if self.delta:
-                self.cf_model = GCNSyntheticPerturbDelta(self.model, self.num_classes,
-                                                         self.sub_adj, num_nodes, self.alpha,
-                                                         self.beta, self.gamma,
-                                                         edge_del=self.edge_del,
-                                                         edge_add=self.edge_add,
-                                                         bernoulli=self.bernoulli,
-                                                         rand_init=self.rand_init,
-                                                         device=self.device, task=self.task)
-            else:
-                self.cf_model = GCNSyntheticPerturbOrig(self.model, self.num_classes,
-                                                        self.sub_adj, num_nodes, self.alpha,
-                                                        self.beta, self.gamma,
-                                                        edge_del=self.edge_del,
-                                                        edge_add=self.edge_add,
-                                                        bernoulli=self.bernoulli,
-                                                        rand_init=self.rand_init,
-                                                        device=self.device, task=self.task)
-        else:
+        if self.cem_mode == "PN":
+            self.edge_add = True
+        elif self.cem_mode == "PP":
+            self.edge_del = True
+        elif self.cem_mode is not None:
             raise RuntimeError("cf_explainer: the specified mode for CEM is invalid")
+
+        # Instantiate CF model class, load weights from original model
+        if self.delta:
+            self.cf_model = GCNSyntheticPerturbDelta(self.model, self.num_classes,
+                                                     self.sub_adj, num_nodes, self.alpha,
+                                                     self.beta, self.gamma,
+                                                     edge_del=self.edge_del,
+                                                     edge_add=self.edge_add,
+                                                     bernoulli=self.bernoulli,
+                                                     cem_mode=self.cem_mode,
+                                                     rand_init=self.rand_init,
+                                                     device=self.device, task=self.task)
+        else:
+            self.cf_model = GCNSyntheticPerturbOrig(self.model, self.num_classes,
+                                                    self.sub_adj, num_nodes, self.alpha,
+                                                    self.beta, self.gamma,
+                                                    edge_del=self.edge_del,
+                                                    edge_add=self.edge_add,
+                                                    bernoulli=self.bernoulli,
+                                                    cem_mode=self.cem_mode,
+                                                    rand_init=self.rand_init,
+                                                    device=self.device, task=self.task)
 
         if self.verbosity > 1:
             for name, param in self.model.named_parameters():
@@ -216,22 +213,8 @@ class CFExplainer:
         y_pred_new = torch.argmax(output)
         y_pred_new_actual = torch.argmax(output_actual)
 
-        if self.cem_mode == "PN":
-
-            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
-                self.cf_model.loss_PN(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
-
-        elif self.cem_mode == "PP":
-
-            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
-                self.cf_model.loss_PP(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
-
-        elif self.cem_mode is None:
-
-            loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
-                self.cf_model.loss(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
-        else:
-            raise RuntimeError("cf_explainer/train: the specified mode for CEM is invalid")
+        loss_total, loss_graph_dist, cf_adj_diff, cf_adj_actual = \
+            self.cf_model.loss(output, y_pred_orig, y_pred_new_actual, prev_adj_list)
 
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)

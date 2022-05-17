@@ -12,7 +12,8 @@ class GCNSyntheticPerturbDelta(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, model, nclass, adj, num_nodes, alpha, beta, gamma, task,
-                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True, device=None):
+                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True,
+                 cem_mode=None, device=None):
         super(GCNSyntheticPerturbDelta, self).__init__()
         self.model = model
         # The adj mat is stored since each instance of the explainer deals with a single node
@@ -27,6 +28,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
         self.num_nodes_actual = num_nodes
 
         self.bernoulli = bernoulli
+        self.cem_mode = cem_mode
         self.device = device
 
         self.BML = BernoulliMLSample.apply
@@ -121,9 +123,18 @@ class GCNSyntheticPerturbDelta(nn.Module):
     def loss(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
 
         if self.bernoulli:
-            res = self.__loss_bernoulli(output, y_pred_orig, y_pred_new_actual, prev_expls)
+
+            if self.cem_mode is None or self.cem_mode == "PN":
+                res = self.__loss_bernoulli(output, y_pred_orig, y_pred_new_actual, prev_expls)
+            elif self.cem_mode == "PP":
+                res = self.__loss_PP_bernoulli(output, y_pred_orig, y_pred_new_actual, prev_expls)
+
         else:
-            res = self.__loss_std(output, y_pred_orig, y_pred_new_actual, prev_expls)
+
+            if self.cem_mode is None or self.cem_mode == "PN":
+                res = self.__loss_std(output, y_pred_orig, y_pred_new_actual, prev_expls)
+            elif self.cem_mode == "PP":
+                res = self.__loss_PP_std(output, y_pred_orig, y_pred_new_actual, prev_expls)
 
         return res
 
@@ -199,3 +210,78 @@ class GCNSyntheticPerturbDelta(nn.Module):
             - self.gamma * diversity_loss
 
         return loss_total, loss_graph_dist, cf_adj, cf_adj
+
+
+    def __loss_PP_std(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
+        P_hat_symm = torch.sigmoid(self.P_tril)
+        P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
+        P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
+
+        # Note: flipped the boolean since we want the same prediction
+        pred_diff = (y_pred_new_actual != y_pred_orig).float()
+
+        # Init to 0, since it will be broadcasted into the appropriate shape by torch
+        delta_diff = 0
+        delta_actual = 0
+
+        # edge_del equivalent
+        delta_diff -= P_hat_symm * self.adj
+        delta_actual -= P * self.adj
+
+        cf_adj_diff = self.adj + delta_diff
+        cf_adj_actual = self.adj + delta_actual
+
+        # Note: the negative sign is gone since we want to keep the same prediction
+        loss_pred = F.nll_loss(output, y_pred_orig)
+        # Number of edges in neighbourhood (symmetrical)
+        # Note: here we are interested in finding the most sparse cf_adj with the same pred
+        loss_graph_dist = torch.sum(torch.abs(cf_adj_diff)) / 2
+        # Note: in order to generate the best PP we need to minimize the number of entries in the
+        # cf_adj, however in order to get a better understanding the number of edges deleted is 
+        # more useful to the end user. Therefore this number is the one saved inside each expl
+        # generated
+        loss_graph_dist_actual = torch.sum(torch.abs(self.adj - cf_adj_actual)) / 2
+
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj_diff, expl)
+
+        # Zero-out loss_pred with pred_same if prediction flips
+        loss_total = self.alpha * pred_diff * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
+
+        return loss_total, loss_graph_dist_actual, cf_adj_diff, cf_adj_actual
+
+
+    def __loss_PP_bernoulli(self, output, y_pred_orig, y_pred_new_actual, prev_expls):
+        P_hat_symm = create_symm_matrix_tril(self.P_tril, self.num_nodes_adj)
+        P = self.BML(P_hat_symm)  # Threshold P_hat
+
+        # Note: flipped the boolean since we want the same prediction
+        pred_diff = (y_pred_new_actual != y_pred_orig).float()
+        delta = 0
+
+        # edge_del equivalent
+        delta -= P * self.adj
+        cf_adj = self.adj + delta
+
+        # Note: the negative sign is gone since we want to keep the same prediction
+        loss_pred = F.nll_loss(output, y_pred_orig)
+        # Number of edges in neighbourhood (symmetrical)
+        # Note: here we are interested in finding the most sparse cf_adj with the same pred
+        loss_graph_dist = torch.sum(torch.abs(cf_adj)) / 2
+        # Note: in order to generate the best PP we need to minimize the number of entries in the
+        # cf_adj, however in order to get a better understanding the number of edges deleted is 
+        # more useful to the end user. Therefore this number is the one saved inside each cf_example
+        # generated
+        loss_graph_dist_actual = torch.sum(torch.abs(self.adj - cf_adj)) / 2
+
+        diversity_loss = 0
+        for expl in prev_expls:
+            diversity_loss += F.cross_entropy(cf_adj, expl)
+
+        # Zero-out loss_pred with pred_same if prediction flips
+        loss_total = self.alpha * pred_diff * loss_pred + self.beta * loss_graph_dist \
+            - self.gamma * diversity_loss
+
+        return loss_total, loss_graph_dist_actual, cf_adj, cf_adj

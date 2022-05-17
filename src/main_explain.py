@@ -32,9 +32,8 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
         device = "cuda"
 #        torch.cuda.manual_seed(seed)
 
-    if cem_mode is not None and (edge_del or edge_add or delta or bernoulli):
-        raise RuntimeError("The CEM implementation doesn't support the arguments: "
-                           + "edge_del, edge_add, delta or bernoulli")
+    if cem_mode is not None and (edge_del or edge_add):
+        raise RuntimeError("CEM implementation doesn't support the arguments: edge_del, edge_add")
 
     # Import dataset
     if dataset_id in datasets.avail_datasets_dict:
