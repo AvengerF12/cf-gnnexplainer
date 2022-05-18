@@ -374,10 +374,10 @@ def evaluate_path_content(res_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--res_path', default=default_path, help='Result path')
+    parser.add_argument('--path', default=default_path, help='Result path')
     args = parser.parse_args()
 
-    result_list = evaluate_path_content(args.res_path)
+    result_list = evaluate_path_content(args.path)
 
     for res in result_list:
         for k, v in res.items():

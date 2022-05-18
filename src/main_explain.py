@@ -22,15 +22,15 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
 
     cuda = cuda and torch.cuda.is_available()
 
-#    np.random.seed(seed)
-#    torch.manual_seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     torch.autograd.set_detect_anomaly(True)
 
     device = None
 
     if cuda:
         device = "cuda"
-#        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
 
     if cem_mode is not None and (edge_del or edge_add):
         raise RuntimeError("CEM implementation doesn't support the arguments: edge_del, edge_add")

@@ -7,12 +7,13 @@ dataset_list = ["MUTAG"]
 lr_list = [0.01, 0.1, 0.5, 1]
 epoch_list = [300, 500]
 beta_list = [0, 0.1, 0.5]
+gamma_list = [0, 0.1, 0.5]
 momentum_list = [0, 0.5, 0.9]
 edge_del_list = [False, True]
 edge_add_list = [False, True]
 bernoulli_list = [True, False]
 delta_list = [True, False]
-cem_list = ["PN", "PP"]
+cem_list = ["PP"]
 cuda_list = [False]
 rand_init_list = [True, False]
 
@@ -20,7 +21,12 @@ hyperpar_combo = {"dataset_id": dataset_list,
                   "lr": lr_list,
                   "num_epochs": epoch_list,
                   "beta": beta_list,
+                  "gamma": gamma_list,
                   "n_momentum": momentum_list,
+                  #"edge_del": edge_del_list,
+                  #"edge_add": edge_add_list,
+                  "bernoulli": bernoulli_list,
+                  "delta": delta_list,
                   "cem_mode": cem_list,
                   "cuda": cuda_list,
                   "rand_init": rand_init_list}
@@ -33,10 +39,6 @@ task_list = []
 for i, combo in enumerate(combo_list):
 
     combo_dict = {dict_keys[i]: combo[i] for i in range(len(dict_keys))}
-
-    # Need to specify at least one op
-    if combo_dict["cem_mode"] is None and not combo_dict["edge_add"] and not combo_dict["edge_del"]:
-        continue
 
     # edge_add in the orig formulation is identical to edge_add + edge_del
     if combo_dict["cem_mode"] is None and combo_dict["edge_add"] and combo_dict["edge_del"]\
