@@ -12,7 +12,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, model, nclass, adj, num_nodes, alpha, beta, gamma, task,
-                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True,
+                 edge_del=False, edge_add=False, bernoulli=False, rand_init=0.5,
                  cem_mode=None, device=None):
         super(GCNSyntheticPerturbOrig, self).__init__()
         self.model = model
@@ -23,6 +23,7 @@ class GCNSyntheticPerturbOrig(nn.Module):
         self.beta = beta
         self.gamma = gamma
         self.bernoulli = bernoulli
+        self.rand_init = rand_init
 
         # Used to find the appropriate part of P to perturbate (w/o padding) and compute flattened
         # layer for graph classification (differs from num_nodes_adj only when task = graph-class)
@@ -43,6 +44,10 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
         # Number of nodes in the adj, in case of graph-class includes padding
         self.num_nodes_adj = self.adj.shape[1]
+        self.init_eps = 10**-6
+
+        if 0 < self.rand_init < self.init_eps:
+            raise RuntimeError("GCNSyntheticPerturbOrig: rand_init value too small")
 
        # The optimizer will affect only the elements below the diag of this matrix
        # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
@@ -56,19 +61,23 @@ class GCNSyntheticPerturbOrig(nn.Module):
         # The idea behind the init is simply to break any symmetries in the parameters, allowing
         # for more diverse explanations by avoiding the simultaneous addition/deletion of relevant
         # edges
-        if rand_init and self.edge_add:
+        if self.rand_init > 0 and self.edge_add:
             if self.bernoulli:
-                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1], a=0.6, b=1)
-                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0], a=0, b=0.4)
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1],
+                                       a=0.5, b=0.5 + self.rand_init)
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0],
+                                       a=0.5 - self.rand_init, b=0.5-self.init_eps)
             else:
-                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1], a=1, b=1.4)
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 1],
+                                       a=0, b=self.rand_init)
                 # Note: the value must be below 0, otherwise the sigmoid will be >= 0.5
-                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0], a=-0.5, b=-0.1)
-        elif rand_init:
+                torch.nn.init.uniform_(self.P_tril[self.P_tril == 0],
+                                       a=-self.rand_init, b=-self.init_eps)
+        elif self.rand_init > 0 and (self.edge_del or self.cem_mode == "PP"):
             if self.bernoulli:
-                torch.nn.init.uniform_(self.P_tril, a=0.6, b=1)
+                torch.nn.init.uniform_(self.P_tril, a=0.5, b=0.5 + self.rand_init)
             else:
-                torch.nn.init.uniform_(self.P_tril, a=0.1, b=0.5)
+                torch.nn.init.uniform_(self.P_tril, a=0, b=self.rand_init)
 
 
     def forward(self, x):
@@ -84,8 +93,6 @@ class GCNSyntheticPerturbOrig(nn.Module):
 
 
     def __forward_std(self, x):
-        # Applying sigmoid on P_tril instead of P_hat_symm avoids problems with
-        # diagonal equal to 1 during training when using edge_add, since sigmoid(0)=0.5
         P_hat_symm = torch.sigmoid(self.P_tril)
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat

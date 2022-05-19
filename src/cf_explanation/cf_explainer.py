@@ -19,7 +19,7 @@ class CFExplainer:
     def __init__(self, model, cf_optimizer, lr, n_momentum, sub_adj, num_nodes, sub_feat,
                  n_hid, dropout, sub_label, num_classes, alpha, beta, gamma, task,
                  cem_mode=None, edge_del=False, edge_add=False, bernoulli=False, delta=False,
-                 rand_init=True, history=True, hist_len=10, div_hind=5, device=None, verbosity=0):
+                 rand_init=0.5, history=True, hist_len=10, div_hind=5, device=None, verbosity=0):
 
         super(CFExplainer, self).__init__()
         self.model = model

@@ -18,7 +18,7 @@ import datasets
 def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
                  optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
                  cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
-                 cuda=False, rand_init=True, history=True, hist_len=10, div_hind=5, verbosity=0):
+                 cuda=False, rand_init=0.5, history=True, hist_len=10, div_hind=5, verbosity=0):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -154,41 +154,41 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     # Build path and save CF examples in test set
     format_path = "../results/{}"
 
-    if cem_mode is None:
-        if not delta:
-            # In the orig formulation edge_add does both operations
-            if edge_add:
-                format_path += "_add_del_orig"
-            elif edge_del:
-                format_path += "_del_orig"
+    if not delta:
+        # In the orig formulation edge_add does both operations
+        if edge_add:
+            format_path += "_add_del"
+        elif edge_del:
+            format_path += "_del"
+        format_path += "_orig"
 
-        else:
-
-            if edge_add:
-                format_path += "_add"
-            if edge_del:
-                format_path += "_del"
-
-            format_path += "_delta"
-
-        if bernoulli:
-            format_path += "_bernoulli"
-
-        format_path += "/"
     else:
-        format_path += "_" + cem_mode + "/"
 
-    format_path += "{}/cf_examples_lr{}_alpha{}_beta{}_gamma{}_mom{}_epochs{}"
+        if edge_add:
+            format_path += "_add"
+        if edge_del:
+            format_path += "_del"
 
-    if rand_init:
+        format_path += "_delta"
+
+    if bernoulli:
+        format_path += "_bernoulli"
+
+
+    if cem_mode is not None:
+        format_path += "_" + cem_mode
+
+    format_path += "/{}/cf_examples_lr{}_alpha{}_beta{}_gamma{}_mom{}_epochs{}_init{}"
+
+    if rand_init > 0:
         format_path += "_rand"
 
     dest_path = format_path.format(dataset_id, optimizer, lr, alpha, beta, gamma,
-                                   n_momentum, num_epochs)
+                                   n_momentum, num_epochs, rand_init)
 
     counter = 0
     # If a random init already exists, don't overwrite and create a new file
-    while(rand_init):
+    while(rand_init > 0):
         if not os.path.exists(dest_path + str(counter)):
             dest_path += str(counter)
             break
@@ -229,8 +229,9 @@ if __name__ == "__main__":
                         help='Use bernoulli-based approach to generate P?')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='Activate CUDA support?')
-    parser.add_argument('--no_rand_init', action='store_true', default=False,
-                        help='Disable random initialisation of the P matrix')
+    parser.add_argument('--rand_init', type=float, default=0.5,
+                        help='Max distance among range of values in P init uniform distribution.\
+                        Assigning 0 disables random initialization')
     parser.add_argument('--no_history', action='store_true', default=False,
                         help='Store all the explanations generated during training?')
     parser.add_argument('--hist_len', type=int, default=10,
@@ -247,5 +248,5 @@ if __name__ == "__main__":
     main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
                  args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
                  args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
-                 args.bernoulli, args.cuda, not args.no_rand_init, not args.no_history, args.hist_len,
-                 args.div_hind, args.verbosity)
+                 args.bernoulli, args.cuda, args.rand_init, not args.no_history,
+                 args.hist_len, args.div_hind, args.verbosity)

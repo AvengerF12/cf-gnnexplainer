@@ -12,7 +12,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
     def __init__(self, model, nclass, adj, num_nodes, alpha, beta, gamma, task,
-                 edge_del=False, edge_add=False, bernoulli=False, rand_init=True,
+                 edge_del=False, edge_add=False, bernoulli=False, rand_init=0.5,
                  cem_mode=None, device=None):
         super(GCNSyntheticPerturbDelta, self).__init__()
         self.model = model
@@ -28,6 +28,7 @@ class GCNSyntheticPerturbDelta(nn.Module):
         self.num_nodes_actual = num_nodes
 
         self.bernoulli = bernoulli
+        self.rand_init = rand_init
         self.cem_mode = cem_mode
         self.device = device
 
@@ -41,22 +42,31 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
         # Number of nodes in the adj, in case of graph-class includes padding
         self.num_nodes_adj = self.adj.shape[1]
+        self.init_eps = 10**-6
+
+        if 0 < self.rand_init < self.init_eps:
+            raise RuntimeError("GCNSyntheticPerturbDelta: rand_init value too small")
 
         # The optimizer will affect only the elements below the diag of this matrix
         # This is enforced through the function create_symm_matrix_tril(), which constructs the 
         # symmetric matrix to optimize using only the lower triangular elements of P_tril
         # Note: no diagonal, it is assumed to be always 0/no self-connections allowed
-        self.P_tril = Parameter(torch.zeros((self.num_nodes_actual, self.num_nodes_actual),
-                                            device=self.device))
+        if self.bernoulli:
+            self.P_tril = Parameter(torch.zeros((self.num_nodes_actual, self.num_nodes_actual),
+                                                device=self.device))
+        else:
+            # Need to guarantee that the initial permutation matrix is all 0s after applying sigm
+            self.P_tril = Parameter(torch.full((self.num_nodes_actual, self.num_nodes_actual),
+                                               -self.init_eps, device=self.device))
 
         # The idea behind the init is simply to break any symmetries in the parameters, allowing
         # for more diverse explanations by avoiding the simultaneous addition/deletion of relevant
         # edges
-        if rand_init:
+        if self.rand_init > 0:
             if self.bernoulli:
-                torch.nn.init.uniform_(self.P_tril, a=0, b=0.4)
+                torch.nn.init.uniform_(self.P_tril, a=0.5-self.rand_init, b=0.5-self.init_eps)
             else:
-                torch.nn.init.uniform_(self.P_tril, a=-0.4, b=0)
+                torch.nn.init.uniform_(self.P_tril, a=-self.rand_init, b=-self.init_eps)
 
 
     def forward(self, x):
@@ -73,8 +83,6 @@ class GCNSyntheticPerturbDelta(nn.Module):
 
     def __forward_std(self, x):
         # Use sigmoid to bound P_hat in [0,1]
-        # Applying sigmoid on P_tril instead of P_hat_symm avoids problems with
-        # diagonal equal to 1 when using edge_add, since sigmoid(0)=0.5 >= threshold already
         P_hat_symm = torch.sigmoid(self.P_tril)
         P_hat_symm = create_symm_matrix_tril(P_hat_symm, self.num_nodes_adj)
         P = (P_hat_symm >= 0.5).float()  # Threshold P_hat
