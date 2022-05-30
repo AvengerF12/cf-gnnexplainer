@@ -108,8 +108,10 @@ def server_explain(dataset, model, hid_units=20, n_layers=3, dropout_r=0, seed=4
     mgr = Manager()
     task_queue = mgr.Queue()
     result_queue = mgr.Queue()
-    pool.apply_async(client_explain, (task_queue, result_queue, device),
-                     error_callback=error_callback)
+
+    for i in range(n_workers):
+        pool.apply_async(client_explain, (task_queue, result_queue, device),
+                         error_callback=error_callback)
 
     for i, v in enumerate(test_idx_list):
 
