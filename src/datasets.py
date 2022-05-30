@@ -33,11 +33,6 @@ class SyntheticDataset(Dataset):
         self.features = torch.Tensor(full_dataset["feat"]).squeeze()
         self.labels = torch.LongTensor(full_dataset["labels"]).squeeze()
 
-        if device == "cuda":
-            self.adj = self.adj.cuda()
-            self.features = self.features.cuda()
-            self.labels = self.labels.cuda()
-
         # Needed for pytorch-geo functions, returns a sparse representation:
         # Edge indices: row/columns of cells containing non-zero entries
         # Edge attributes: tensor containing edge's features
@@ -97,12 +92,6 @@ class MUTAGDataset(Dataset):
         self.adj = to_dense_adj(torch.LongTensor(sparse_np_adj)).squeeze()
         # Need to remove the top row and the left most col since the nodes in dataset start from 1
         self.adj = self.adj[1:,:][:, 1:]
-
-        if device == "cuda":
-            # Load data
-            self.adj = self.adj.cuda()
-            self.features = self.features.cuda()
-            self.labels = self.labels.cuda()
 
         # Group nodes by graph indicator
         graphs_df = pd.DataFrame(np_array_g_ind, columns=["Indicator"])

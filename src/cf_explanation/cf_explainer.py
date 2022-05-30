@@ -51,8 +51,15 @@ class CFExplainer:
 
         self.model.eval()
 
+        # Sanity check
+        sub_adj_diag = torch.diag(self.sub_adj)
+        if sub_adj_diag[sub_adj_diag != 0].any():
+            raise RuntimeError("Self-connections on graphs are not allowed")
+
         if self.cem_mode is None and not edge_del and not edge_add:
             raise RuntimeError("CFExplainer: need to specify allowed add/del op")
+        if self.cem_mode is not None and (edge_del or edge_add):
+            raise RuntimeError("CEM implementation doesn't support arguments edge_del or edge_add")
 
         if self.gamma > 0 and not self.history:
             raise RuntimeError("CFExplainer: enable history to generate diverse explanations")
@@ -195,7 +202,7 @@ class CFExplainer:
             expl_list = hist_list
 
         expl_res = [node_idx, new_idx, expl_list, self.sub_adj.cpu(), self.sub_feat.cpu(),
-                    self.sub_label.cpu(), y_pred_orig, self.num_nodes]
+                    self.sub_label.cpu(), y_pred_orig.cpu(), self.num_nodes]
 
         return expl_res, num_expl
 
@@ -244,4 +251,4 @@ class CFExplainer:
             expl_inst = [cf_adj_actual.detach().squeeze().cpu(), y_pred_new_actual.detach().cpu(),
                          loss_graph_dist.detach().item()]
 
-        return(expl_inst, cf_adj_diff.detach(), loss_graph_dist.detach().item())
+        return (expl_inst, cf_adj_diff.detach(), loss_graph_dist.detach().item())

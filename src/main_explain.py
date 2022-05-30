@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import time
 import torch
+from torch.multiprocessing import Manager, Pool, Queue, set_start_method, freeze_support
 from models import GCNSynthetic, GraphAttNet
 from cf_explanation.cf_explainer import CFExplainer
 from utils.utils import get_neighbourhood, safe_open
@@ -15,10 +16,7 @@ from torch_geometric.utils import dense_to_sparse
 import datasets
 
 
-def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
-                 optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
-                 cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
-                 cuda=False, rand_init=0.5, history=True, hist_len=10, div_hind=5, verbosity=0):
+def setup_env(dataset_id, hid_units=20, dropout_r=0, seed=42, cuda=False):
 
     cuda = cuda and torch.cuda.is_available()
 
@@ -31,9 +29,6 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     if cuda:
         device = "cuda"
         torch.cuda.manual_seed(seed)
-
-    if cem_mode is not None and (edge_del or edge_add):
-        raise RuntimeError("CEM implementation doesn't support the arguments: edge_del, edge_add")
 
     # Import dataset
     if dataset_id in datasets.avail_datasets_dict:
@@ -61,8 +56,46 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     model.load_state_dict(torch.load("../models/gcn_3layer_{}.pt".format(dataset_id)))
     model.eval()
 
-    if cuda:
-        model = model.cuda()
+    return dataset, model, device
+
+def error_callback(arg):
+    print("Error: ", arg)
+
+def client_explain(task_q, res_q, device):
+
+    while True:
+        args = task_q.get()
+
+        if args == []:
+            break
+
+        task_idx = args[0]
+        expl_par = args[1]
+        expl_args = args[2]
+
+        if device == "cuda":
+            expl_par["model"] = expl_par["model"].cuda()
+
+            expl_par["sub_adj"] = expl_par["sub_adj"].cuda()
+            expl_par["sub_feat"] = expl_par["sub_feat"].cuda()
+            expl_par["sub_label"] = expl_par["sub_label"].cuda()
+
+            expl_args["y_pred_orig"] = expl_args["y_pred_orig"].cuda()
+
+        # Need to instantitate new cf_model for each instance because size of P
+        # changes based on size of sub_adj
+        explainer = CFExplainer(**expl_par)
+
+        expl, num_tot_expl = explainer.explain(**expl_args)
+
+        result = [task_idx, expl, num_tot_expl]
+        res_q.put(result)
+
+def server_explain(dataset, model, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=0.005,
+                 optimizer="SGD", n_momentum=0, alpha=1, beta=0.5, gamma=0, num_epochs=500,
+                 cem_mode=None, edge_del=False, edge_add=False, delta=False, bernoulli=False,
+                 device=None, rand_init=0.5, history=True, hist_len=10, div_hind=1,
+                 n_workers=1, verbosity=0):
 
     # Get explanations for data in test set
     test_expls = []
@@ -71,7 +104,14 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     _, test_idx_list = dataset.split_tr_ts_idx()
     num_expl_found = 0
 
-    for i, v  in enumerate(test_idx_list):
+    pool = Pool(processes=n_workers)
+    mgr = Manager()
+    task_queue = mgr.Queue()
+    result_queue = mgr.Queue()
+    pool.apply_async(client_explain, (task_queue, result_queue, device),
+                     error_callback=error_callback)
+
+    for i, v in enumerate(test_idx_list):
 
         if dataset.task == "node-class":
             sub_adj, sub_feat, sub_labels, orig_idx, new_idx, num_nodes = dataset[v]
@@ -89,63 +129,51 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
             elif dataset.task == "graph-class":
                 y_pred_orig = torch.argmax(output, dim=0)
 
-        # Sanity check
-        sub_adj_diag = torch.diag(sub_adj)
-        if sub_adj_diag[sub_adj_diag != 0].any():
-            raise RuntimeError("Self-connections on graphs are not allowed")
-
-        # Need to instantitate new cf_model for each instance because size of P
-        # changes based on size of sub_adj
-        # Note: sub_labels is just 1 label for graph class
-        explainer = CFExplainer(model=model,
-                                cf_optimizer=optimizer,
-                                lr=lr,
-                                n_momentum=n_momentum,
-                                sub_adj=sub_adj,
-                                num_nodes=num_nodes,
-                                sub_feat=sub_feat,
-                                n_hid=hid_units,
-                                dropout=dropout_r,
-                                sub_label=sub_label,
-                                num_classes=dataset.n_classes,
-                                alpha=alpha,
-                                beta=beta,
-                                gamma=gamma,
-                                task=dataset.task,
-                                cem_mode=cem_mode,
-                                edge_del=edge_del,
-                                edge_add=edge_add,
-                                delta=delta,
-                                bernoulli=bernoulli,
-                                rand_init=rand_init,
-                                history=history,
-                                hist_len=hist_len,
-                                div_hind=div_hind,
-                                device=device,
-                                verbosity=verbosity)
-
-        if cuda:
-            explainer.cf_model.cuda()
+        expl_par = {"model": model, "cf_optimizer": optimizer, "lr": lr, "n_momentum": n_momentum,
+                    "sub_adj": sub_adj, "num_nodes": num_nodes, "sub_feat": sub_feat,
+                    "n_hid": hid_units, "dropout": dropout_r, "sub_label": sub_label,
+                    "num_classes": dataset.n_classes, "alpha": alpha, "beta": beta, "gamma": gamma,
+                    "task": dataset.task, "cem_mode": cem_mode, "edge_del": edge_del,
+                    "edge_add": edge_add, "delta": delta, "bernoulli": bernoulli,
+                    "rand_init": rand_init, "history": history, "hist_len": hist_len,
+                    "div_hind": div_hind, "device": device, "verbosity": verbosity}
 
         if dataset.task == "node-class":
 
-            expl, num_expl_inst = explainer.explain(task=dataset.task, y_pred_orig=y_pred_orig,
-                                                    node_idx=orig_idx, new_idx=new_idx,
-                                                    num_epochs=num_epochs)
+            expl_func_args = {"task": dataset.task, "y_pred_orig": y_pred_orig,
+                              "node_idx": orig_idx, "new_idx": new_idx, "num_epochs": num_epochs}
+
         elif dataset.task == "graph-class":
-            expl, num_expl_inst = explainer.explain(task=dataset.task, num_epochs=num_epochs,
-                                                    y_pred_orig=y_pred_orig)
 
-        test_expls.append(expl)
+            expl_func_args = {"task": dataset.task, "num_epochs": num_epochs,
+                              "y_pred_orig": y_pred_orig}
 
-        # Count number of valid explanations generated
+        task_queue.put([i, expl_par, expl_func_args])
+
+    # Put end of work signal in queue
+    for i in range(n_workers):
+        task_queue.put([])
+
+    # Wait for work completion
+    pool.close()
+    pool.join()
+
+    res_list = []
+
+    while not result_queue.empty():
+
+        res = result_queue.get()
+        num_expl_inst = res[2]
+
         if num_expl_inst > 0:
             num_expl_found += 1
 
-        if verbosity > 0:
-            time_frmt_str = "Time for {} epochs of one example ({}/{}): {:.4f}min"
-            print(time_frmt_str.format(num_epochs, i + 1, len(test_idx_list),
-                                       (time.time() - start)/60))
+        res_list.append(res)
+
+    # Sort list according to instance idx
+    res_list.sort(key=lambda x: x[0])
+
+    test_expls = [res[1] for res in res_list]
 
     print("Total time elapsed: {:.4f} mins".format((time.time() - start)/60))
     # Includes also empty examples!
@@ -183,7 +211,7 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
     if rand_init > 0:
         format_path += "_rand"
 
-    dest_path = format_path.format(dataset_id, optimizer, lr, alpha, beta, gamma,
+    dest_path = format_path.format(dataset.dataset_id, optimizer, lr, alpha, beta, gamma,
                                    n_momentum, num_epochs, rand_init)
 
     counter = 0
@@ -197,7 +225,6 @@ def main_explain(dataset_id, hid_units=20, n_layers=3, dropout_r=0, seed=42, lr=
 
     with safe_open(dest_path, "wb") as f:
         pickle.dump(test_expls, f)
-
 
 if __name__ == "__main__":
 
@@ -240,13 +267,22 @@ if __name__ == "__main__":
                         'evenly-spaced elements of the original history.')
     parser.add_argument('--div_hind', type=int, default=5,
                         help='How many previous explanations to include when using diversity loss')
+    parser.add_argument('--n_workers', type=int, default=1,
+                        help='Number of workers to run to compute the explanation')
     parser.add_argument('--verbosity', type=int, default=0,
                         help='Level of output verbosity (0, 1, 2)')
 
     args = parser.parse_args()
 
-    main_explain(args.dataset, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
-                 args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
-                 args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
-                 args.bernoulli, args.cuda, args.rand_init, not args.no_history,
-                 args.hist_len, args.div_hind, args.verbosity)
+    # Needed to use multiprocessing with cuda tensors
+    freeze_support()
+    set_start_method("spawn")
+
+    dataset, model, device = \
+        setup_env(args.dataset, args.hidden, args.dropout, args.seed, args.cuda)
+
+    server_explain(dataset, model, args.hidden, args.n_layers, args.dropout, args.seed, args.lr,
+                   args.optimizer, args.n_momentum, args.alpha, args.beta, args.gamma,
+                   args.num_epochs, args.cem_mode, args.edge_del, args.edge_add, args.delta,
+                   args.bernoulli, device, args.rand_init, not args.no_history,
+                   args.hist_len, args.div_hind, args.n_workers, args.verbosity)
