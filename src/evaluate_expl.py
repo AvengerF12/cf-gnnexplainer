@@ -362,11 +362,22 @@ def evaluate_path_content(res_path):
             with open(path, "rb") as f:
                 generated_expls = pickle.load(f)
 
-            res = evaluate(generated_expls, dataset_id, dataset_name, dataset_dict[dataset_id],
-                           expl_task)
-            res["path"] = path
+            # De-sparsify all relevant tensors
+            for i, inst in enumerate(generated_expls):
+                for j, expl in enumerate(generated_expls[i][2]):
+                    # cf_adj_actual
+                    generated_expls[i][2][j][0] = generated_expls[i][2][j][0].to_dense()
 
-            result_list.append(res)
+                # sub_adj
+                generated_expls[i][3] = generated_expls[i][3].to_dense()
+                # sub_feat
+                generated_expls[i][4] = generated_expls[i][4].to_dense()
+
+            result = evaluate(generated_expls, dataset_id, dataset_name,
+                              dataset_dict[dataset_id], expl_task)
+            result["path"] = path
+
+            result_list.append(result)
 
     return result_list
 

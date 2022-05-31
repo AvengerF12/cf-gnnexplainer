@@ -164,13 +164,24 @@ def server_explain(dataset, model, hid_units=20, n_layers=3, dropout_r=0, seed=4
 
     while not result_queue.empty():
 
-        res = result_queue.get()
-        num_expl_inst = res[2]
+        queue_res = result_queue.get()
+        num_expl_inst = queue_res[2]
+        expl_res = queue_res[1]
 
         if num_expl_inst > 0:
             num_expl_found += 1
 
-        res_list.append(res)
+        # Sparsify all relevant tensors
+        for i, expl in enumerate(expl_res[2]):
+            # cf_adj_actual
+            expl_res[2][i][0] = expl_res[2][i][0].to_sparse()
+
+        # sub_adj
+        expl_res[3] = expl_res[3].to_sparse()
+        # sub_feat
+        expl_res[4] = expl_res[4].to_sparse()
+
+        res_list.append(queue_res)
 
     # Sort list according to instance idx
     res_list.sort(key=lambda x: x[0])
