@@ -116,13 +116,23 @@ def visualize_by_path(df_path, idx_ex, idx_hist, dataset):
 
     # Load CF examples
     with open(df_path, "rb") as f:
-        expls = pickle.load(f)
+        generated_expls = pickle.load(f)
         df_prep = []
 
-        for example in expls:
+        # De-sparsify all relevant tensors
+        for i, inst in enumerate(generated_expls):
+            for j, expl in enumerate(generated_expls[i][2]):
+                # cf_adj_actual
+                generated_expls[i][2][j][0] = generated_expls[i][2][j][0].to_dense()
+
+            # sub_adj
+            generated_expls[i][3] = generated_expls[i][3].to_dense()
+            # sub_feat
+            generated_expls[i][4] = generated_expls[i][4].to_dense()
+
             # Ignore examples for which generating an explanation wasn't possible
-            if example[2] != []:
-                df_prep.append(example)
+            if inst[2] != []:
+                df_prep.append(inst)
 
         df = pd.DataFrame(df_prep, columns=header_data)
 
