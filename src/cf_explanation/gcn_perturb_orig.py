@@ -55,8 +55,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
             # Initialize the matrix to the lower triangular part of the adj
             self.P_tril = Parameter(torch.tril(self.adj, -1).detach())
         else:
-            self.P_tril = Parameter(torch.FloatTensor(torch.ones(self.num_nodes_actual,
-                                                                 self.num_nodes_actual)))
+            self.P_tril = Parameter(torch.ones((self.num_nodes_actual, self.num_nodes_actual),
+                                               device=self.device))
 
         # The idea behind the init is simply to break any symmetries in the parameters, allowing
         # for more diverse explanations by avoiding the simultaneous addition/deletion of relevant
