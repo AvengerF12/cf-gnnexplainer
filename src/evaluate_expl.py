@@ -278,7 +278,9 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     len_expl_list = expl_df["expl_list"].transform(lambda x: len(x))
     avg_history_len = np.mean(len_expl_list)
 
-    if expl_task == "PP":
+    if num_tot_expl == 0:
+        fidelity = np.nan
+    elif expl_task == "PP":
         fidelity = num_valid_expl / num_tot_expl
     else:
         # PN and counterfactual case
