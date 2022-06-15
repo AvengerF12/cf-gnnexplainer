@@ -54,6 +54,8 @@ class GCNSyntheticPerturbOrig(nn.Module):
         if self.edge_add:
             # Initialize the matrix to the lower triangular part of the adj
             self.P_tril = Parameter(torch.tril(self.adj, -1).detach())
+            # Use to avoid sigmoid setting everything to >= 0.5
+            self.P_tril[self.P_tril == 0].fill_(-self.init_eps)
         else:
             self.P_tril = Parameter(torch.ones((self.num_nodes_actual, self.num_nodes_actual),
                                                device=self.device))
