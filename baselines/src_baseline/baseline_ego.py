@@ -114,17 +114,16 @@ for i in idx_test[:]:
 	if (pred_cf != pred_orig):
 		cf_example = [i.item(), new_idx.item(),
 			            cf_adj.detach().numpy(), sub_adj.detach().numpy(),
-			            pred_cf.item(), pred_orig.item(), sub_labels[new_idx].numpy(),
-			            sub_adj.shape[0], node_dict,
-			               loss_graph_dist.item()]
-		test_cf_examples.append(cf_example)
+			            pred_orig.item(), pred_cf.item(), sub_labels[new_idx].numpy(),
+			            sub_adj.shape[0], loss_graph_dist.item()]
+		test_cf_examples.append((cf_example, best_loss))
 print("Total time elapsed: {:.4f}min".format((time.time() - start)/60))
 
 # Save CF examples in test set
 
 if args.keep_ego == 0:
-	with safe_open("../results/remove_ego/{}_baseline_cf_examples".format(args.dataset), "wb") as f:
+	with safe_open("../../results/remove_ego/{}_baseline_cf_examples".format(args.dataset), "wb") as f:
 			pickle.dump(test_cf_examples, f)
 else:
-	with safe_open("../results/keep_ego/{}_baseline_cf_examples".format(args.dataset), "wb") as f:
+	with safe_open("../../results/keep_ego/{}_baseline_cf_examples".format(args.dataset), "wb") as f:
 			pickle.dump(test_cf_examples, f)

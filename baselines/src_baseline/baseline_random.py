@@ -73,16 +73,17 @@ test_cf_examples = []
 start = time.time()
 for i in idx_test[:]:
 	best_loss = np.inf
+	
+	sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(i), edge_index, args.n_layers + 1, features, labels)
+	new_idx = node_dict[int(i)]
+
+	# Get CF adj, new prediction
+	num_nodes = sub_adj.shape[0]
+
+	# P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
+	P_vec_size = int((num_nodes * num_nodes - num_nodes) / 2)  + num_nodes
 
 	for n in range(args.num_epochs):
-		sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(int(i), edge_index, args.n_layers + 1, features, labels)
-		new_idx = node_dict[int(i)]
-
-		# Get CF adj, new prediction
-		num_nodes = sub_adj.shape[0]
-
-		# P_hat needs to be symmetric ==> learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-		P_vec_size = int((num_nodes * num_nodes - num_nodes) / 2)  + num_nodes
 
 		# Randomly initialize P_vec in [-1, 1]
 		r1 = -1
@@ -113,13 +114,14 @@ for i in idx_test[:]:
 			print("best loss: {}".format(best_loss))
 			best_cf_example = [i.item(), new_idx.item(),
 				            cf_adj.detach().numpy(), sub_adj.detach().numpy(),
-				            pred_cf.item(), pred_orig.item(), sub_labels[new_idx].numpy(),
-				            sub_adj.shape[0], node_dict,
-				               loss_graph_dist.item()]
-	test_cf_examples.append(best_cf_example)
+				            pred_orig.item(), pred_cf.item(), sub_labels[new_idx].numpy(),
+				            sub_adj.shape[0], loss_graph_dist.item()]
+				            
+	test_cf_examples.append((best_cf_example, best_loss))
 	print("Time for {} epochs of one example: {:.4f}min".format(args.num_epochs, (time.time() - start)/60))
+	
 print("Total time elapsed: {:.4f}min".format((time.time() - start)/60))
 
 # Save CF examples in test set
-with safe_open("../results/random_perturb/{}_baseline_cf_examples_epochs{}".format(args.dataset, args.num_epochs), "wb") as f:
+with safe_open("../../results/random_perturb/{}_baseline_cf_examples_epochs{}".format(args.dataset, args.num_epochs), "wb") as f:
 		pickle.dump(test_cf_examples, f)
