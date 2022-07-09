@@ -112,7 +112,7 @@ def visualize_generic(df, idx_ex, idx_hist, figsize=(20,15)):
     nx.draw_networkx_labels(adj_graph, pos)
 
 
-def visualize_by_path(df_path, idx_ex, idx_hist, dataset):
+def visualize_by_path(df_path, idx_ex, idx_hist, dataset=None):
 
     # Load CF examples
     with open(df_path, "rb") as f:
