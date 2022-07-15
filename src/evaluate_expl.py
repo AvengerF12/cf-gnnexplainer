@@ -281,6 +281,14 @@ def evaluate(expl_list, dataset_id, dataset_name, dataset_data, expl_task, accur
     if num_tot_expl == 0:
         fidelity = np.nan
     elif expl_task == "PP":
+        # Fidelity for PP needs to check that the explanations differ from the base instance
+        # otherwise it will always be equal to 1
+        valid_expl_pp = expl_df["expl_list"].transform(lambda x: not torch.equal(x[0][0], x[-1][0]))
+        count_results = valid_expl_pp.value_counts()
+        if True in count_results:
+            num_valid_expl = count_results[True]
+        else:
+            num_valid_expl = 0
         fidelity = num_valid_expl / num_tot_expl
     else:
         # PN and counterfactual case
