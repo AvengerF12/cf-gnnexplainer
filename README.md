@@ -60,4 +60,4 @@ The pretrained models are available in the models folder
 
 ## Results
 
-WIP
+The final results and a more complete description of the whole project can be found in my [dissertation](Dissertation.pdf) document.
